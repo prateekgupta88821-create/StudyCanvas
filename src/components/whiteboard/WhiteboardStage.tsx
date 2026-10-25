@@ -1,15 +1,17 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { 
   Stage, 
   Layer, 
-  Line, 
-  Rect, 
-  Circle, 
-  Text, 
-  Star, 
-  Arrow, 
-  Group, 
-  Transformer 
+  Line as KonvaLine, 
+  Rect as KonvaRect, 
+  Circle as KonvaCircle, 
+  Ellipse as KonvaEllipse,
+  Text as KonvaText, 
+  Star as KonvaStar, 
+  Arrow as KonvaArrow, 
+  Group as KonvaGroup, 
+  Transformer,
+  Image as KonvaImage
 } from 'react-konva';
 import type Konva from 'konva';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
@@ -20,12 +22,59 @@ import {
   TextElement, 
   StickyElement, 
   FormulaElement,
-  Point 
+  ImageElement,
+  GraphElement,
+  TableElement,
+  FlowchartNodeElement,
+  MindmapNodeElement,
+  Point
 } from '@/types/whiteboard';
+import { 
+  CanvasGraphItem, 
+  CanvasTableItem, 
+  CanvasFlowchartItem, 
+  CanvasMindmapItem 
+} from './WhiteboardElements';
 
 export interface WhiteboardStageProps {
   stageRef: React.RefObject<Konva.Stage | null>;
 }
+
+// Helper image component for Konva rendering
+const CanvasImageItem: React.FC<{
+  element: ImageElement;
+  isSelected: boolean;
+  onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
+  onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
+  onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
+}> = ({ element, onSelect, onTransformEnd, onDragEnd }) => {
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.src = element.src;
+    img.onload = () => setImage(img);
+  }, [element.src]);
+
+  return (
+    <KonvaImage
+      id={element.id}
+      image={image || undefined}
+      x={element.x}
+      y={element.y}
+      width={element.width}
+      height={element.height}
+      rotation={element.rotation || 0}
+      opacity={element.opacity !== undefined ? element.opacity : 1}
+      draggable={true}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragEnd={onDragEnd}
+      onTransformEnd={onTransformEnd}
+    />
+  );
+};
 
 export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) => {
   const {
@@ -34,7 +83,12 @@ export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) =>
     shapeType,
     strokeColor,
     strokeWidth,
-    gridType,
+    strokeOpacity,
+    fillColor,
+    fontFamily,
+    fontSize,
+    stickyColor,
+    eraserMode,
     scale,
     setScale,
     stagePos,
@@ -42,507 +96,722 @@ export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) =>
     addElement,
     updateElement,
     deleteElement,
-    selectedElementId,
-    setSelectedElementId,
+    selectedElementIds,
+    setSelectedElementIds,
+    isFocusMode,
   } = useWhiteboard();
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const transformerRef = useRef<Konva.Transformer | null>(null);
 
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
-    height: window.innerHeight - 56, // subtract navbar height
+    height: window.innerHeight,
   });
 
-  const transformerRef = useRef<Konva.Transformer | null>(null);
-  const isDrawing = useRef(false);
-  const currentElementRef = useRef<CanvasElement | null>(null);
+  // Transient in-progress drawing states
+  const isPointerDown = useRef(false);
+  const isSpacePanning = useRef(false);
   const startPointRef = useRef<Point>({ x: 0, y: 0 });
+  const [transientElement, setTransientElement] = useState<CanvasElement | null>(null);
+
+  // Marquee selection box state
+  const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
+  // Inline text editing state
+  const [editingText, setEditingText] = useState<{
+    id: string;
+    type: 'text' | 'sticky';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    fontColor: string;
+  } | null>(null);
 
   // Laser pointer vanishing trail
   const [laserTrail, setLaserTrail] = useState<{ x: number; y: number; id: number }[]>([]);
 
-  // Update canvas dimensions on window resize
+  // Update canvas dimensions dynamically with ResizeObserver
   useEffect(() => {
-    const handleResize = () => {
-      setDimensions({
-        width: window.innerWidth,
-        height: window.innerHeight - 56,
-      });
+    const updateSize = () => {
+      if (containerRef.current) {
+        setDimensions({
+          width: containerRef.current.offsetWidth || window.innerWidth,
+          height: containerRef.current.offsetHeight || window.innerHeight,
+        });
+      }
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
-  // Update Konva transformer node when selectedElementId changes
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    const observer = new ResizeObserver(updateSize);
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      observer.disconnect();
+    };
+  }, [isFocusMode]);
+
+  // Spacebar pan listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        isSpacePanning.current = true;
+        if (stageRef.current) {
+          stageRef.current.container().style.cursor = 'grab';
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        isSpacePanning.current = false;
+        if (stageRef.current) {
+          stageRef.current.container().style.cursor = getCursorForTool(tool);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [tool, stageRef]);
+
+  // Update Konva Transformer nodes when selectedElementIds change
   useEffect(() => {
     if (!transformerRef.current || !stageRef.current) return;
-    if (selectedElementId && tool === 'select') {
-      const selectedNode = stageRef.current.findOne('#' + selectedElementId);
-      if (selectedNode) {
-        transformerRef.current.nodes([selectedNode]);
-        transformerRef.current.getLayer()?.batchDraw();
-        return;
+    if (tool === 'select' && selectedElementIds.length > 0) {
+      const nodes: Konva.Node[] = [];
+      for (const id of selectedElementIds) {
+        const node = stageRef.current.findOne('#' + id);
+        if (node) nodes.push(node);
       }
+      transformerRef.current.nodes(nodes);
+      transformerRef.current.getLayer()?.batchDraw();
+    } else {
+      transformerRef.current.nodes([]);
+      transformerRef.current.getLayer()?.batchDraw();
     }
-    transformerRef.current.nodes([]);
-    transformerRef.current.getLayer()?.batchDraw();
-  }, [selectedElementId, tool, stageRef]);
+  }, [selectedElementIds, tool, stageRef, activePage.elements]);
 
-  // Handle stage pointer down
-  const handlePointerDown = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-    const stage = e.target.getStage();
+  // Determine stage cursor based on active tool
+  function getCursorForTool(t: string): string {
+    switch (t) {
+      case 'select': return 'default';
+      case 'pan': return 'grab';
+      case 'pen':
+      case 'highlighter': return 'crosshair';
+      case 'eraser': return 'cell';
+      case 'text': return 'text';
+      case 'sticky': return 'copy';
+      case 'shape': return 'crosshair';
+      case 'laser': return 'none';
+      default: return 'default';
+    }
+  }
+
+  // Handle Wheel: pinch-to-zoom (with ctrl) or 2D pan
+  const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
+    e.evt.preventDefault();
+    const stage = stageRef.current;
     if (!stage) return;
 
-    // Deselect if clicked on empty stage
-    if (e.target === stage) {
-      setSelectedElementId(null);
-    }
+    if (e.evt.ctrlKey || e.evt.metaKey) {
+      // Zoom towards mouse pointer
+      const oldScale = scale;
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
 
-    if (tool === 'pan') {
-      return; // Handled by Stage draggable
-    }
+      const mousePointTo = {
+        x: (pointer.x - stagePos.x) / oldScale,
+        y: (pointer.y - stagePos.y) / oldScale,
+      };
 
+      const zoomFactor = e.evt.deltaY < 0 ? 1.08 : 0.92;
+      const newScale = Math.min(5, Math.max(0.15, Number((oldScale * zoomFactor).toFixed(2))));
+
+      setScale(newScale);
+      setStagePos({
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale,
+      });
+    } else {
+      // 2D Pan
+      setStagePos(prev => ({
+        x: prev.x - e.evt.deltaX,
+        y: prev.y - e.evt.deltaY,
+      }));
+    }
+  };
+
+  // Convert screen coordinates to world coordinates
+  const getWorldPointerPos = useCallback((): Point | null => {
+    const stage = stageRef.current;
+    if (!stage) return null;
     const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
+    if (!pointerPos) return null;
+    return {
+      x: (pointerPos.x - stagePos.x) / scale,
+      y: (pointerPos.y - stagePos.y) / scale,
+    };
+  }, [scale, stagePos, stageRef]);
 
-    // Transform raw screen position to canvas coordinates taking zoom and pan into account
-    const canvasX = (pointerPos.x - stagePos.x) / scale;
-    const canvasY = (pointerPos.y - stagePos.y) / scale;
+  // Pointer Down handler
+  const handlePointerDown = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    const stage = stageRef.current;
+    if (!stage) return;
 
-    startPointRef.current = { x: canvasX, y: canvasY };
-    isDrawing.current = true;
+    // Check if middle click or space key is pressed for panning
+    if ((e.evt as MouseEvent).button === 1 || isSpacePanning.current || tool === 'pan') {
+      stage.container().style.cursor = 'grabbing';
+      isPointerDown.current = true;
+      const pointer = stage.getPointerPosition();
+      if (pointer) {
+        startPointRef.current = { x: pointer.x - stagePos.x, y: pointer.y - stagePos.y };
+      }
+      return;
+    }
 
+    const worldPos = getWorldPointerPos();
+    if (!worldPos) return;
+
+    isPointerDown.current = true;
+    startPointRef.current = worldPos;
+
+    // Selection tool: marquee selection or deselection
+    if (tool === 'select') {
+      if (e.target === stage) {
+        // Clicked background -> clear selection and start marquee
+        setSelectedElementIds([]);
+        setMarquee({ x: worldPos.x, y: worldPos.y, width: 0, height: 0 });
+      }
+      return;
+    }
+
+    // Pen & Highlighter: start transient stroke
     if (tool === 'pen' || tool === 'highlighter') {
+      const pressure = (e.evt as any).pressure ? Math.max(0.4, (e.evt as any).pressure * 1.5) : 1;
+      const effectiveSize = (tool === 'highlighter' ? strokeWidth * 3.5 : strokeWidth) * pressure;
+
       const newStroke: StrokeElement = {
         id: 'stroke_' + Math.random().toString(36).substring(2, 9),
         type: tool,
         x: 0,
         y: 0,
-        points: [canvasX, canvasY],
+        points: [worldPos.x, worldPos.y],
         color: strokeColor,
-        size: tool === 'highlighter' ? strokeWidth * 3.5 : strokeWidth,
-        opacity: tool === 'highlighter' ? 0.35 : 1,
-        tension: 0.5,
+        size: effectiveSize,
+        opacity: tool === 'highlighter' ? 0.35 : strokeOpacity,
+        tension: 0.45,
         lineCap: tool === 'highlighter' ? 'square' : 'round',
         lineJoin: 'round',
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      currentElementRef.current = newStroke;
-      addElement(newStroke);
-    } else if (tool === 'shape') {
+      setTransientElement(newStroke);
+      return;
+    }
+
+    // Shape tool: start transient shape
+    if (tool === 'shape') {
       const newShape: ShapeElement = {
         id: 'shape_' + Math.random().toString(36).substring(2, 9),
         type: 'shape',
         shapeType,
-        x: canvasX,
-        y: canvasY,
+        x: worldPos.x,
+        y: worldPos.y,
         width: 1,
         height: 1,
         stroke: strokeColor,
         strokeWidth,
-        fill: shapeType === 'circle' || shapeType === 'rectangle' ? 'transparent' : strokeColor,
+        fill: fillColor,
+        opacity: strokeOpacity,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      currentElementRef.current = newShape;
-      addElement(newShape);
-    } else if (tool === 'text') {
-      const textPrompt = prompt('Enter annotation text:', 'Key Lecture Takeaway');
-      if (textPrompt && textPrompt.trim()) {
-        const newText: TextElement = {
-          id: 'text_' + Math.random().toString(36).substring(2, 9),
-          type: 'text',
-          x: canvasX,
-          y: canvasY,
-          text: textPrompt.trim(),
-          fontSize: 20,
-          fontFamily: 'Inter',
-          fontColor: strokeColor,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        addElement(newText);
-      }
-      isDrawing.current = false;
-    } else if (tool === 'sticky') {
-      const stickyPrompt = prompt('Sticky note content:', 'Recall: Study this theorem for quiz');
-      if (stickyPrompt) {
-        const newSticky: StickyElement = {
-          id: 'sticky_' + Math.random().toString(36).substring(2, 9),
-          type: 'sticky',
-          x: canvasX,
-          y: canvasY,
-          text: stickyPrompt,
-          color: '#fef08a', // classic warm educational sticky yellow
-          width: 160,
-          height: 140,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        addElement(newSticky);
-      }
-      isDrawing.current = false;
-    } else if (tool === 'laser') {
-      setLaserTrail([{ x: canvasX, y: canvasY, id: Date.now() }]);
+      setTransientElement(newShape);
+      return;
+    }
+
+    // Text tool: click to create in-place text
+    if (tool === 'text') {
+      const newId = 'text_' + Math.random().toString(36).substring(2, 9);
+      const newText: TextElement = {
+        id: newId,
+        type: 'text',
+        x: worldPos.x,
+        y: worldPos.y,
+        text: 'Type text here...',
+        fontSize,
+        fontFamily,
+        fontColor: strokeColor,
+        opacity: strokeOpacity,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      addElement(newText);
+      setSelectedElementIds([newId]);
+      // Open inline editor immediately
+      setEditingText({
+        id: newId,
+        type: 'text',
+        x: worldPos.x,
+        y: worldPos.y,
+        width: 200,
+        height: 40,
+        text: '',
+        fontSize,
+        fontFamily,
+        fontColor: strokeColor,
+      });
+      isPointerDown.current = false;
+      return;
+    }
+
+    // Sticky Note tool: click to place sticky note
+    if (tool === 'sticky') {
+      const newId = 'sticky_' + Math.random().toString(36).substring(2, 9);
+      const newSticky: StickyElement = {
+        id: newId,
+        type: 'sticky',
+        x: worldPos.x,
+        y: worldPos.y,
+        text: 'New Sticky Note',
+        color: stickyColor,
+        width: 160,
+        height: 140,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      addElement(newSticky);
+      setSelectedElementIds([newId]);
+      isPointerDown.current = false;
+      return;
+    }
+
+    // Laser pointer
+    if (tool === 'laser') {
+      setLaserTrail([{ x: worldPos.x, y: worldPos.y, id: Date.now() }]);
     }
   };
 
-  // Handle stage pointer move
+  // Pointer Move handler
   const handlePointerMove = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-    const stage = e.target.getStage();
+    const stage = stageRef.current;
     if (!stage) return;
 
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
+    // Pan with spacebar or middle click or pan tool
+    if (isPointerDown.current && (isSpacePanning.current || tool === 'pan' || (e.evt as MouseEvent).buttons === 4)) {
+      const pointer = stage.getPointerPosition();
+      if (pointer) {
+        setStagePos({
+          x: pointer.x - startPointRef.current.x,
+          y: pointer.y - startPointRef.current.y,
+        });
+      }
+      return;
+    }
 
-    const canvasX = (pointerPos.x - stagePos.x) / scale;
-    const canvasY = (pointerPos.y - stagePos.y) / scale;
+    const worldPos = getWorldPointerPos();
+    if (!worldPos) return;
 
-    // Laser pointer mode
+    // Laser trail updates
     if (tool === 'laser') {
-      const newPoint = { x: canvasX, y: canvasY, id: Date.now() };
-      setLaserTrail(prev => [...prev.slice(-15), newPoint]);
-      // Vanish trail gradually
+      const pt = { x: worldPos.x, y: worldPos.y, id: Date.now() };
+      setLaserTrail(prev => [...prev.slice(-16), pt]);
       setTimeout(() => {
         setLaserTrail(prev => prev.filter(p => Date.now() - p.id < 450));
       }, 450);
       return;
     }
 
-    if (!isDrawing.current) return;
+    if (!isPointerDown.current) return;
 
-    // Eraser mode: detect intersection and remove elements
+    // Marquee dragging
+    if (tool === 'select' && marquee) {
+      const width = worldPos.x - marquee.x;
+      const height = worldPos.y - marquee.y;
+      setMarquee(prev => prev ? { ...prev, width, height } : null);
+      return;
+    }
+
+    // Eraser mode
     if (tool === 'eraser') {
-      const threshold = 18 / scale;
-      activePage.elements.forEach((el) => {
+      const radius = (strokeWidth * 3) / scale;
+      const toDelete: string[] = [];
+
+      for (const el of activePage.elements) {
         if (el.type === 'pen' || el.type === 'highlighter') {
           const stroke = el as StrokeElement;
           for (let i = 0; i < stroke.points.length; i += 2) {
             const px = stroke.points[i];
             const py = stroke.points[i + 1];
-            if (Math.hypot(px - canvasX, py - canvasY) < threshold) {
-              deleteElement(el.id);
+            if (Math.hypot(px - worldPos.x, py - worldPos.y) < radius) {
+              toDelete.push(el.id);
               break;
             }
           }
-        } else if (el.type === 'shape' || el.type === 'text' || el.type === 'sticky' || el.type === 'formula') {
+        } else if (eraserMode === 'object') {
+          // Bounding box hit test in object eraser mode
+          const w = (el as any).width || 80;
+          const h = (el as any).height || 80;
           if (
-            canvasX >= el.x - 10 &&
-            canvasX <= el.x + 120 &&
-            canvasY >= el.y - 10 &&
-            canvasY <= el.y + 100
+            worldPos.x >= (el as any).x - radius &&
+            worldPos.x <= (el as any).x + w + radius &&
+            worldPos.y >= (el as any).y - radius &&
+            worldPos.y <= (el as any).y + h + radius
           ) {
-            deleteElement(el.id);
+            toDelete.push(el.id);
           }
         }
+      }
+
+      if (toDelete.length > 0) {
+        for (const id of toDelete) {
+          deleteElement(id);
+        }
+      }
+      return;
+    }
+
+    // Pen & Highlighter stroke appending
+    if ((tool === 'pen' || tool === 'highlighter') && transientElement) {
+      const current = transientElement as StrokeElement;
+      const newPoints = current.points.concat([worldPos.x, worldPos.y]);
+      setTransientElement({
+        ...current,
+        points: newPoints,
       });
       return;
     }
 
-    // Active stroke drawing
-    if ((tool === 'pen' || tool === 'highlighter') && currentElementRef.current) {
-      const current = currentElementRef.current as StrokeElement;
-      const updatedPoints = current.points.concat([canvasX, canvasY]);
-      current.points = updatedPoints;
-      updateElement(current.id, { points: updatedPoints });
-    }
+    // Shape sizing
+    if (tool === 'shape' && transientElement) {
+      const current = transientElement as ShapeElement;
+      let width = worldPos.x - startPointRef.current.x;
+      let height = worldPos.y - startPointRef.current.y;
 
-    // Active shape sizing
-    if (tool === 'shape' && currentElementRef.current) {
-      const current = currentElementRef.current as ShapeElement;
-      const width = canvasX - startPointRef.current.x;
-      const height = canvasY - startPointRef.current.y;
-      updateElement(current.id, {
+      // Hold Shift to lock 1:1 aspect ratio
+      if ((e.evt as MouseEvent).shiftKey) {
+        const side = Math.max(Math.abs(width), Math.abs(height));
+        width = width < 0 ? -side : side;
+        height = height < 0 ? -side : side;
+      }
+
+      setTransientElement({
+        ...current,
         width: Math.abs(width),
         height: Math.abs(height),
-        x: width < 0 ? canvasX : startPointRef.current.x,
-        y: height < 0 ? canvasY : startPointRef.current.y,
+        x: width < 0 ? worldPos.x : startPointRef.current.x,
+        y: height < 0 ? worldPos.y : startPointRef.current.y,
       });
     }
   };
 
-  // Handle stage pointer up
+  // Pointer Up handler: commit transient element or marquee selection
   const handlePointerUp = () => {
-    isDrawing.current = false;
-    currentElementRef.current = null;
-  };
+    isPointerDown.current = false;
+    if (stageRef.current) {
+      stageRef.current.container().style.cursor = isSpacePanning.current ? 'grab' : getCursorForTool(tool);
+    }
 
-  // Zoom on mouse wheel towards pointer
-  const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
-    e.evt.preventDefault();
-    const stage = stageRef.current;
-    if (!stage) return;
+    // Commit marquee selection
+    if (tool === 'select' && marquee) {
+      const normX = marquee.width < 0 ? marquee.x + marquee.width : marquee.x;
+      const normY = marquee.height < 0 ? marquee.y + marquee.height : marquee.y;
+      const normW = Math.abs(marquee.width);
+      const normH = Math.abs(marquee.height);
 
-    const oldScale = scale;
-    const pointer = stage.getPointerPosition();
-    if (!pointer) return;
+      if (normW > 5 || normH > 5) {
+        const intersectedIds = activePage.elements
+          .filter(el => {
+            const w = (el as any).width || 40;
+            const h = (el as any).height || 40;
+            return (
+              el.x < normX + normW &&
+              el.x + w > normX &&
+              el.y < normY + normH &&
+              el.y + h > normY
+            );
+          })
+          .map(el => el.id);
 
-    const scaleBy = 1.08;
-    const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    const clampedScale = Math.min(Math.max(0.2, newScale), 4);
-
-    const mousePointTo = {
-      x: (pointer.x - stagePos.x) / oldScale,
-      y: (pointer.y - stagePos.y) / oldScale,
-    };
-
-    setScale(clampedScale);
-    setStagePos({
-      x: pointer.x - mousePointTo.x * clampedScale,
-      y: pointer.y - mousePointTo.y * clampedScale,
-    });
-  };
-
-  // Render element helper
-  const renderElement = (el: CanvasElement) => {
-    switch (el.type) {
-      case 'pen':
-      case 'highlighter': {
-        const stroke = el as StrokeElement;
-        return (
-          <Line
-            key={el.id}
-            id={el.id}
-            points={stroke.points}
-            stroke={stroke.color}
-            strokeWidth={stroke.size}
-            opacity={stroke.opacity ?? 1}
-            tension={stroke.tension ?? 0.5}
-            lineCap={stroke.lineCap ?? 'round'}
-            lineJoin="round"
-            draggable={tool === 'select'}
-            onClick={() => tool === 'select' && setSelectedElementId(el.id)}
-            onTap={() => tool === 'select' && setSelectedElementId(el.id)}
-            onDragEnd={(e) => {
-              updateElement(el.id, { x: e.target.x(), y: e.target.y() });
-            }}
-          />
-        );
+        setSelectedElementIds(intersectedIds);
       }
+      setMarquee(null);
+      return;
+    }
 
-      case 'shape': {
-        const shape = el as ShapeElement;
-        const commonProps = {
-          key: el.id,
-          id: el.id,
-          x: shape.x,
-          y: shape.y,
-          stroke: shape.stroke,
-          strokeWidth: shape.strokeWidth,
-          draggable: tool === 'select',
-          onClick: () => tool === 'select' && setSelectedElementId(el.id),
-          onTap: () => tool === 'select' && setSelectedElementId(el.id),
-          onDragEnd: (e: any) => {
-            updateElement(el.id, { x: e.target.x(), y: e.target.y() });
-          },
-          onTransformEnd: (e: any) => {
-            const node = e.target;
-            const scaleX = node.scaleX();
-            const scaleY = node.scaleY();
-            node.scaleX(1);
-            node.scaleY(1);
-            updateElement(el.id, {
-              x: node.x(),
-              y: node.y(),
-              width: Math.max(10, node.width() * scaleX),
-              height: Math.max(10, node.height() * scaleY),
-              rotation: node.rotation(),
-            });
-          },
-        };
-
-        if (shape.shapeType === 'circle') {
-          const radius = Math.max(shape.width, shape.height) / 2;
-          return <Circle {...commonProps} radius={radius} fill={shape.fill || 'transparent'} />;
+    // Commit transient drawn stroke or shape to project document model
+    if (transientElement) {
+      // Validate that stroke has at least 4 coordinates or shape has dimension
+      if (
+        (transientElement.type === 'pen' || transientElement.type === 'highlighter') &&
+        (transientElement as StrokeElement).points.length >= 4
+      ) {
+        addElement(transientElement);
+      } else if (transientElement.type === 'shape') {
+        const s = transientElement as ShapeElement;
+        if (s.width > 3 && s.height > 3) {
+          addElement(s);
+          setSelectedElementIds([s.id]);
         }
-
-        if (shape.shapeType === 'arrow') {
-          return (
-            <Arrow
-              {...commonProps}
-              points={[0, 0, shape.width || 80, shape.height || 0]}
-              pointerLength={12}
-              pointerWidth={10}
-              fill={shape.stroke}
-            />
-          );
-        }
-
-        if (shape.shapeType === 'line') {
-          return (
-            <Line
-              {...commonProps}
-              points={[0, 0, shape.width || 100, shape.height || 0]}
-              lineCap="round"
-            />
-          );
-        }
-
-        if (shape.shapeType === 'star') {
-          return (
-            <Star
-              {...commonProps}
-              numPoints={5}
-              innerRadius={Math.min(shape.width, shape.height) / 4}
-              outerRadius={Math.min(shape.width, shape.height) / 2}
-              fill={shape.fill || 'transparent'}
-            />
-          );
-        }
-
-        // Default: Rectangle
-        return (
-          <Rect
-            {...commonProps}
-            width={shape.width || 60}
-            height={shape.height || 60}
-            cornerRadius={6}
-            fill={shape.fill || 'transparent'}
-          />
-        );
       }
-
-      case 'text': {
-        const textEl = el as TextElement;
-        return (
-          <Text
-            key={el.id}
-            id={el.id}
-            x={textEl.x}
-            y={textEl.y}
-            text={textEl.text}
-            fontSize={textEl.fontSize || 20}
-            fontFamily={textEl.fontFamily || 'Inter'}
-            fill={textEl.fontColor || '#ffffff'}
-            draggable={tool === 'select'}
-            onClick={() => tool === 'select' && setSelectedElementId(el.id)}
-            onTap={() => tool === 'select' && setSelectedElementId(el.id)}
-            onDblClick={() => {
-              const updated = prompt('Edit annotation text:', textEl.text);
-              if (updated !== null && updated.trim()) {
-                updateElement(el.id, { text: updated.trim() });
-              }
-            }}
-            onDragEnd={(e) => {
-              updateElement(el.id, { x: e.target.x(), y: e.target.y() });
-            }}
-          />
-        );
-      }
-
-      case 'sticky': {
-        const sticky = el as StickyElement;
-        return (
-          <Group
-            key={el.id}
-            id={el.id}
-            x={sticky.x}
-            y={sticky.y}
-            draggable={tool === 'select'}
-            onClick={() => tool === 'select' && setSelectedElementId(el.id)}
-            onTap={() => tool === 'select' && setSelectedElementId(el.id)}
-            onDragEnd={(e) => {
-              updateElement(el.id, { x: e.target.x(), y: e.target.y() });
-            }}
-          >
-            <Rect
-              width={sticky.width || 160}
-              height={sticky.height || 140}
-              fill={sticky.color || '#fef08a'}
-              cornerRadius={8}
-              shadowColor="#000000"
-              shadowBlur={12}
-              shadowOpacity={0.3}
-              shadowOffset={{ x: 3, y: 4 }}
-            />
-            <Text
-              x={12}
-              y={12}
-              width={(sticky.width || 160) - 24}
-              height={(sticky.height || 140) - 24}
-              text={sticky.text}
-              fontSize={14}
-              fontFamily="Inter"
-              fill="#1e293b"
-              wrap="word"
-              onDblClick={() => {
-                const updated = prompt('Edit Sticky Note:', sticky.text);
-                if (updated !== null) {
-                  updateElement(el.id, { text: updated });
-                }
-              }}
-            />
-          </Group>
-        );
-      }
-
-      case 'formula': {
-        const formula = el as FormulaElement;
-        return (
-          <Group
-            key={el.id}
-            id={el.id}
-            x={formula.x}
-            y={formula.y}
-            draggable={tool === 'select'}
-            onClick={() => tool === 'select' && setSelectedElementId(el.id)}
-            onTap={() => tool === 'select' && setSelectedElementId(el.id)}
-            onDragEnd={(e) => {
-              updateElement(el.id, { x: e.target.x(), y: e.target.y() });
-            }}
-          >
-            <Rect
-              width={Math.max(200, formula.renderedText.length * 11 + 30)}
-              height={50}
-              fill="#0f172a"
-              stroke="#6366f1"
-              strokeWidth={1.5}
-              cornerRadius={10}
-              shadowColor="#6366f1"
-              shadowBlur={8}
-              shadowOpacity={0.2}
-            />
-            <Text
-              x={15}
-              y={14}
-              text={formula.renderedText}
-              fontSize={formula.fontSize || 18}
-              fontFamily="JetBrains Mono, monospace"
-              fontStyle="bold"
-              fill={formula.color || '#fbbf24'}
-            />
-          </Group>
-        );
-      }
-
-      default:
-        return null;
+      setTransientElement(null);
     }
   };
 
-  const getGridClass = () => {
-    switch (gridType) {
-      case 'dots': return 'bg-grid-dots';
-      case 'grid': return 'bg-grid-lines';
-      case 'ruled': return 'bg-grid-ruled';
-      case 'isometric': return 'bg-grid-isometric';
-      default: return 'bg-slate-950';
+  // Double click to edit Text or Sticky Note
+  const handleElementDoubleClick = (el: CanvasElement) => {
+    if (el.type === 'text') {
+      const textEl = el as TextElement;
+      setEditingText({
+        id: textEl.id,
+        type: 'text',
+        x: textEl.x,
+        y: textEl.y,
+        width: textEl.width || 200,
+        height: 40,
+        text: textEl.text,
+        fontSize: textEl.fontSize,
+        fontFamily: textEl.fontFamily,
+        fontColor: textEl.fontColor,
+      });
+    } else if (el.type === 'sticky') {
+      const stickyEl = el as StickyElement;
+      setEditingText({
+        id: stickyEl.id,
+        type: 'sticky',
+        x: stickyEl.x,
+        y: stickyEl.y,
+        width: stickyEl.width,
+        height: stickyEl.height,
+        text: stickyEl.text,
+        fontSize: 16,
+        fontFamily: 'Inter',
+        fontColor: '#1e293b',
+      });
+    }
+  };
+
+  // Save inline text edits
+  const handleSaveInlineText = () => {
+    if (!editingText) return;
+    if (editingText.type === 'text') {
+      updateElement(editingText.id, { text: editingText.text });
+    } else if (editingText.type === 'sticky') {
+      updateElement(editingText.id, { text: editingText.text });
+    }
+    setEditingText(null);
+  };
+
+  // Drag-and-drop file upload directly onto canvas
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      const rect = stage.container().getBoundingClientRect();
+      const worldX = (e.clientX - rect.left - stagePos.x) / scale;
+      const worldY = (e.clientY - rect.top - stagePos.y) / scale;
+
+      const img = new window.Image();
+      img.src = dataUrl;
+      img.onload = () => {
+        const maxWidth = 400;
+        const aspect = img.width / img.height;
+        const width = Math.min(img.width, maxWidth);
+        const height = width / aspect;
+
+        const newImage: ImageElement = {
+          id: 'image_' + Math.random().toString(36).substring(2, 9),
+          type: 'image',
+          src: dataUrl,
+          x: worldX,
+          y: worldY,
+          width,
+          height,
+          naturalWidth: img.width,
+          naturalHeight: img.height,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+
+        addElement(newImage);
+        setSelectedElementIds([newImage.id]);
+      };
+    };
+    reader.readAsDataURL(file);
+  }, [scale, stagePos, stageRef, addElement, setSelectedElementIds]);
+
+  // Render a specific shape element
+  const renderShapeElement = (shape: ShapeElement) => {
+    const strokeProps = {
+      id: shape.id,
+      x: shape.x,
+      y: shape.y,
+      stroke: shape.stroke,
+      strokeWidth: shape.strokeWidth,
+      fill: shape.fill && shape.fill !== 'transparent' ? shape.fill : undefined,
+      opacity: shape.opacity !== undefined ? shape.opacity : 1,
+      rotation: shape.rotation || 0,
+      draggable: tool === 'select',
+      onClick: (e: any) => {
+        if (tool === 'select') {
+          e.cancelBubble = true;
+          setSelectedElementIds([shape.id]);
+        }
+      },
+      onDragEnd: (e: any) => {
+        updateElement(shape.id, { x: e.target.x(), y: e.target.y() });
+      },
+      onTransformEnd: (e: any) => {
+        const node = e.target;
+        const scaleX = node.scaleX();
+        const scaleY = node.scaleY();
+        node.scaleX(1);
+        node.scaleY(1);
+        updateElement(shape.id, {
+          x: node.x(),
+          y: node.y(),
+          width: Math.max(5, node.width() * scaleX),
+          height: Math.max(5, node.height() * scaleY),
+          rotation: node.rotation(),
+        });
+      },
+    };
+
+    switch (shape.shapeType) {
+      case 'circle':
+        return (
+          <KonvaCircle
+            {...strokeProps}
+            key={shape.id}
+            radius={Math.max(shape.width, shape.height) / 2}
+            offsetX={-Math.max(shape.width, shape.height) / 2}
+            offsetY={-Math.max(shape.width, shape.height) / 2}
+          />
+        );
+      case 'ellipse':
+        return (
+          <KonvaEllipse
+            {...strokeProps}
+            key={shape.id}
+            radiusX={shape.width / 2}
+            radiusY={shape.height / 2}
+            offsetX={-shape.width / 2}
+            offsetY={-shape.height / 2}
+          />
+        );
+      case 'arrow':
+        return (
+          <KonvaArrow
+            key={shape.id}
+            id={shape.id}
+            points={[shape.x, shape.y, shape.x + shape.width, shape.y + shape.height]}
+            stroke={shape.stroke}
+            fill={shape.stroke}
+            strokeWidth={shape.strokeWidth}
+            pointerLength={12}
+            pointerWidth={10}
+            draggable={tool === 'select'}
+            onClick={(e) => {
+              if (tool === 'select') {
+                e.cancelBubble = true;
+                setSelectedElementIds([shape.id]);
+              }
+            }}
+          />
+        );
+      case 'line':
+        return (
+          <KonvaLine
+            key={shape.id}
+            id={shape.id}
+            points={[shape.x, shape.y, shape.x + shape.width, shape.y + shape.height]}
+            stroke={shape.stroke}
+            strokeWidth={shape.strokeWidth}
+            lineCap="round"
+            draggable={tool === 'select'}
+            onClick={(e) => {
+              if (tool === 'select') {
+                e.cancelBubble = true;
+                setSelectedElementIds([shape.id]);
+              }
+            }}
+          />
+        );
+      case 'star':
+        return (
+          <KonvaStar
+            {...strokeProps}
+            key={shape.id}
+            numPoints={5}
+            innerRadius={shape.width * 0.25}
+            outerRadius={shape.width * 0.5}
+            offsetX={-shape.width / 2}
+            offsetY={-shape.height / 2}
+          />
+        );
+      case 'rectangle':
+      default:
+        return (
+          <KonvaRect
+            {...strokeProps}
+            key={shape.id}
+            width={shape.width}
+            height={shape.height}
+            cornerRadius={4}
+          />
+        );
     }
   };
 
   return (
-    <div 
-      className={`relative h-[calc(100vh-56px)] w-full overflow-hidden select-none ${getGridClass()}`}
-      style={{ cursor: tool === 'pan' ? 'grab' : (tool === 'eraser' ? 'crosshair' : (tool === 'select' ? 'default' : 'crosshair')) }}
+    <div
+      ref={containerRef}
+      onDrop={handleDrop}
+      onDragOver={(e) => e.preventDefault()}
+      className="relative w-full h-full select-none overflow-hidden"
+      style={{
+        backgroundColor: activePage.backgroundColor || '#090d16',
+        backgroundImage: activePage.gridType === 'dots'
+          ? 'radial-gradient(circle, rgba(255,255,255,0.12) 1.2px, transparent 1.2px)'
+          : activePage.gridType === 'grid'
+          ? 'linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px)'
+          : activePage.gridType === 'ruled'
+          ? 'linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)'
+          : 'none',
+        backgroundSize: activePage.gridType === 'ruled'
+          ? `100% ${32 * scale}px`
+          : `${32 * scale}px ${32 * scale}px`,
+        backgroundPosition: `${stagePos.x}px ${stagePos.y}px`,
+      }}
     >
       <Stage
-        ref={stageRef}
+        ref={stageRef as any}
         width={dimensions.width}
         height={dimensions.height}
         scaleX={scale}
         scaleY={scale}
         x={stagePos.x}
         y={stagePos.y}
-        draggable={tool === 'pan'}
         onWheel={handleWheel}
         onMouseDown={handlePointerDown}
         onMouseMove={handlePointerMove}
@@ -550,52 +819,438 @@ export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) =>
         onTouchStart={handlePointerDown}
         onTouchMove={handlePointerMove}
         onTouchEnd={handlePointerUp}
-        onDragEnd={(e) => {
-          if (tool === 'pan' && e.target === stageRef.current) {
-            setStagePos({ x: e.target.x(), y: e.target.y() });
-          }
-        }}
       >
+        {/* Layer 1: Elements */}
         <Layer>
-          {/* Active page elements */}
-          {activePage.elements.map(renderElement)}
+          {/* Coordinate Plane Cartesian Axes when gridType is coordinate */}
+          {activePage.gridType === 'coordinate' && (
+            <KonvaGroup listening={false}>
+              <KonvaLine
+                points={[-10000, 0, 10000, 0]}
+                stroke="#64748b"
+                strokeWidth={2}
+              />
+              <KonvaLine
+                points={[0, -10000, 0, 10000]}
+                stroke="#64748b"
+                strokeWidth={2}
+              />
+              <KonvaText
+                x={12}
+                y={-22}
+                text="X"
+                fill="#94a3b8"
+                fontSize={14}
+                fontStyle="bold"
+                fontFamily="JetBrains Mono, monospace"
+              />
+              <KonvaText
+                x={-22}
+                y={12}
+                text="Y"
+                fill="#94a3b8"
+                fontSize={14}
+                fontStyle="bold"
+                fontFamily="JetBrains Mono, monospace"
+              />
+              <KonvaText
+                x={-16}
+                y={-18}
+                text="(0,0)"
+                fill="#64748b"
+                fontSize={11}
+                fontFamily="JetBrains Mono, monospace"
+              />
+            </KonvaGroup>
+          )}
 
-          {/* Laser pointer trail animation */}
-          {laserTrail.length > 1 && (
-            <Line
-              points={laserTrail.flatMap(p => [p.x, p.y])}
-              stroke="#f43f5e"
-              strokeWidth={8}
+          {activePage.elements.map((el) => {
+            if (el.type === 'pen' || el.type === 'highlighter') {
+              const stroke = el as StrokeElement;
+              return (
+                <KonvaLine
+                  key={stroke.id}
+                  id={stroke.id}
+                  points={stroke.points}
+                  stroke={stroke.color}
+                  strokeWidth={stroke.size}
+                  tension={stroke.tension || 0.4}
+                  lineCap={stroke.lineCap || 'round'}
+                  lineJoin={stroke.lineJoin || 'round'}
+                  opacity={stroke.opacity !== undefined ? stroke.opacity : 1}
+                  globalCompositeOperation={
+                    stroke.type === 'highlighter' ? 'source-over' : 'source-over'
+                  }
+                  draggable={tool === 'select'}
+                  onClick={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([stroke.id]);
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    updateElement(stroke.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                />
+              );
+            }
+
+            if (el.type === 'shape') {
+              return renderShapeElement(el as ShapeElement);
+            }
+
+            if (el.type === 'text') {
+              const textEl = el as TextElement;
+              return (
+                <KonvaText
+                  key={textEl.id}
+                  id={textEl.id}
+                  x={textEl.x}
+                  y={textEl.y}
+                  text={textEl.text}
+                  fontSize={textEl.fontSize}
+                  fontFamily={textEl.fontFamily || 'Inter'}
+                  fill={textEl.fontColor || '#ffffff'}
+                  opacity={textEl.opacity !== undefined ? textEl.opacity : 1}
+                  rotation={textEl.rotation || 0}
+                  draggable={tool === 'select'}
+                  onClick={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([textEl.id]);
+                    }
+                  }}
+                  onDblClick={() => handleElementDoubleClick(textEl)}
+                  onDblTap={() => handleElementDoubleClick(textEl)}
+                  onDragEnd={(e) => {
+                    updateElement(textEl.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                  onTransformEnd={(e) => {
+                    const node = e.target;
+                    updateElement(textEl.id, {
+                      x: node.x(),
+                      y: node.y(),
+                      rotation: node.rotation(),
+                      fontSize: Math.max(10, textEl.fontSize * node.scaleX()),
+                    });
+                    node.scaleX(1);
+                    node.scaleY(1);
+                  }}
+                />
+              );
+            }
+
+            if (el.type === 'sticky') {
+              const stickyEl = el as StickyElement;
+              return (
+                <KonvaGroup
+                  key={stickyEl.id}
+                  id={stickyEl.id}
+                  x={stickyEl.x}
+                  y={stickyEl.y}
+                  draggable={tool === 'select'}
+                  onClick={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([stickyEl.id]);
+                    }
+                  }}
+                  onDblClick={() => handleElementDoubleClick(stickyEl)}
+                  onDblTap={() => handleElementDoubleClick(stickyEl)}
+                  onDragEnd={(e) => {
+                    updateElement(stickyEl.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                >
+                  <KonvaRect
+                    width={stickyEl.width}
+                    height={stickyEl.height}
+                    fill={stickyEl.color}
+                    cornerRadius={8}
+                    shadowColor="rgba(0,0,0,0.4)"
+                    shadowBlur={12}
+                    shadowOffset={{ x: 2, y: 4 }}
+                    shadowOpacity={0.6}
+                  />
+                  <KonvaText
+                    x={12}
+                    y={12}
+                    width={stickyEl.width - 24}
+                    height={stickyEl.height - 24}
+                    text={stickyEl.text}
+                    fontSize={15}
+                    fontFamily="Inter, sans-serif"
+                    fill="#1e293b"
+                    lineHeight={1.3}
+                  />
+                </KonvaGroup>
+              );
+            }
+
+            if (el.type === 'image') {
+              return (
+                <CanvasImageItem
+                  key={el.id}
+                  element={el as ImageElement}
+                  isSelected={selectedElementIds.includes(el.id)}
+                  onSelect={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([el.id]);
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    updateElement(el.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                  onTransformEnd={(e) => {
+                    const node = e.target;
+                    const scaleX = node.scaleX();
+                    const scaleY = node.scaleY();
+                    node.scaleX(1);
+                    node.scaleY(1);
+                    updateElement(el.id, {
+                      x: node.x(),
+                      y: node.y(),
+                      width: Math.max(20, (el as ImageElement).width * scaleX),
+                      height: Math.max(20, (el as ImageElement).height * scaleY),
+                      rotation: node.rotation(),
+                    });
+                  }}
+                />
+              );
+            }
+
+            if (el.type === 'formula') {
+              const formula = el as FormulaElement;
+              return (
+                <KonvaGroup
+                  key={formula.id}
+                  id={formula.id}
+                  x={formula.x}
+                  y={formula.y}
+                  draggable={tool === 'select'}
+                  onClick={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([formula.id]);
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    updateElement(formula.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                >
+                  <KonvaRect
+                    width={220}
+                    height={54}
+                    fill="#131722"
+                    stroke="#a3e635"
+                    strokeWidth={1}
+                    cornerRadius={8}
+                    opacity={0.9}
+                  />
+                  <KonvaText
+                    x={12}
+                    y={16}
+                    text={formula.renderedText || formula.latex}
+                    fontSize={formula.fontSize || 18}
+                    fontFamily="JetBrains Mono, monospace"
+                    fill={formula.color || '#a3e635'}
+                  />
+                </KonvaGroup>
+              );
+            }
+
+            if (el.type === 'graph') {
+              return (
+                <CanvasGraphItem
+                  key={el.id}
+                  element={el as GraphElement}
+                  tool={tool}
+                  onSelect={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([el.id]);
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    updateElement(el.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                />
+              );
+            }
+
+            if (el.type === 'table') {
+              return (
+                <CanvasTableItem
+                  key={el.id}
+                  element={el as TableElement}
+                  tool={tool}
+                  onSelect={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([el.id]);
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    updateElement(el.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                />
+              );
+            }
+
+            if (el.type === 'flowchart') {
+              return (
+                <CanvasFlowchartItem
+                  key={el.id}
+                  element={el as FlowchartNodeElement}
+                  tool={tool}
+                  onSelect={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([el.id]);
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    updateElement(el.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                />
+              );
+            }
+
+            if (el.type === 'mindmap') {
+              return (
+                <CanvasMindmapItem
+                  key={el.id}
+                  element={el as MindmapNodeElement}
+                  tool={tool}
+                  onSelect={(e) => {
+                    if (tool === 'select') {
+                      e.cancelBubble = true;
+                      setSelectedElementIds([el.id]);
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    updateElement(el.id, { x: e.target.x(), y: e.target.y() });
+                  }}
+                />
+              );
+            }
+
+            return null;
+          })}
+
+          {/* Transient in-progress drawn stroke/shape */}
+          {transientElement && transientElement.type === 'pen' && (
+            <KonvaLine
+              points={(transientElement as StrokeElement).points}
+              stroke={(transientElement as StrokeElement).color}
+              strokeWidth={(transientElement as StrokeElement).size}
+              tension={0.45}
               lineCap="round"
               lineJoin="round"
-              shadowColor="#f43f5e"
-              shadowBlur={18}
-              shadowOpacity={0.9}
-              opacity={0.85}
+              opacity={(transientElement as StrokeElement).opacity}
             />
           )}
 
-          {/* Konva Transformer for resizing/rotating selected elements */}
-          {tool === 'select' && (
-            <Transformer
-              ref={transformerRef}
-              boundBoxFunc={(oldBox, newBox) => {
-                // Limit minimum size
-                if (newBox.width < 10 || newBox.height < 10) {
-                  return oldBox;
-                }
-                return newBox;
-              }}
-              borderStroke="#6366f1"
-              borderDash={[4, 4]}
-              anchorFill="#6366f1"
-              anchorStroke="#ffffff"
-              anchorSize={8}
-              anchorCornerRadius={4}
+          {transientElement && transientElement.type === 'highlighter' && (
+            <KonvaLine
+              points={(transientElement as StrokeElement).points}
+              stroke={(transientElement as StrokeElement).color}
+              strokeWidth={(transientElement as StrokeElement).size}
+              tension={0.45}
+              lineCap="square"
+              lineJoin="round"
+              opacity={0.35}
             />
           )}
+
+          {transientElement && transientElement.type === 'shape' && (
+            renderShapeElement(transientElement as ShapeElement)
+          )}
+
+          {/* Marquee Selection Rectangle */}
+          {marquee && (
+            <KonvaRect
+              x={marquee.width < 0 ? marquee.x + marquee.width : marquee.x}
+              y={marquee.height < 0 ? marquee.y + marquee.height : marquee.y}
+              width={Math.abs(marquee.width)}
+              height={Math.abs(marquee.height)}
+              fill="rgba(163, 230, 53, 0.08)"
+              stroke="#a3e635"
+              strokeWidth={1 / scale}
+              dash={[4 / scale, 4 / scale]}
+            />
+          )}
+
+          {/* Konva Transformer Handles for selected element(s) */}
+          <Transformer
+            ref={transformerRef as any}
+            boundBoxFunc={(oldBox, newBox) => {
+              if (newBox.width < 5 || newBox.height < 5) return oldBox;
+              return newBox;
+            }}
+            anchorFill="#a3e635"
+            anchorStroke="#090b0e"
+            anchorSize={8}
+            anchorCornerRadius={2}
+            borderStroke="#a3e635"
+            borderDash={[4, 4]}
+          />
         </Layer>
+
+        {/* Layer 2: Vanishing Laser Pointer */}
+        {laserTrail.length > 1 && (
+          <Layer listening={false}>
+            {laserTrail.map((p, idx) => (
+              <KonvaCircle
+                key={p.id + '-' + idx}
+                x={p.x}
+                y={p.y}
+                radius={Math.max(2, 6 * (idx / laserTrail.length))}
+                fill="#ef4444"
+                shadowColor="#ef4444"
+                shadowBlur={10}
+                opacity={idx / laserTrail.length}
+              />
+            ))}
+          </Layer>
+        )}
       </Stage>
+
+      {/* HTML Overlay for In-Place Inline Text Editing */}
+      {editingText && (
+        <div
+          className="absolute z-40"
+          style={{
+            left: `${editingText.x * scale + stagePos.x}px`,
+            top: `${editingText.y * scale + stagePos.y}px`,
+          }}
+        >
+          <textarea
+            autoFocus
+            defaultValue={editingText.text}
+            onChange={(e) => setEditingText(prev => prev ? { ...prev, text: e.target.value } : null)}
+            onBlur={handleSaveInlineText}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || editingText.type === 'text')) {
+                handleSaveInlineText();
+              } else if (e.key === 'Escape') {
+                setEditingText(null);
+              }
+            }}
+            className={`rounded-lg p-2 resize-none border shadow-2xl focus:outline-none ${
+              editingText.type === 'sticky'
+                ? 'bg-amber-100 text-slate-900 border-amber-300 font-sans'
+                : 'bg-slate-900/90 text-white border-lime-500 font-sans'
+            }`}
+            style={{
+              width: `${Math.max(160, editingText.width * scale)}px`,
+              minHeight: `${Math.max(50, editingText.height * scale)}px`,
+              fontSize: `${Math.max(14, editingText.fontSize * scale)}px`,
+              fontFamily: editingText.fontFamily,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 };

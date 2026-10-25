@@ -7,12 +7,17 @@ export type ToolType =
   | 'shape'
   | 'text'
   | 'sticky'
+  | 'image'
   | 'formula'
-  | 'laser';
+  | 'laser'
+  | 'graph'
+  | 'table'
+  | 'flowchart'
+  | 'mindmap';
 
-export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'arrow' | 'line' | 'star';
+export type ShapeType = 'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'arrow' | 'line' | 'star';
 
-export type GridType = 'blank' | 'dots' | 'lines' | 'grid' | 'isometric' | 'ruled';
+export type GridType = 'blank' | 'dots' | 'lines' | 'grid' | 'isometric' | 'ruled' | 'coordinate';
 
 export interface Point {
   x: number;
@@ -28,6 +33,7 @@ export interface BaseElement {
   opacity?: number;
   stroke?: string;
   strokeWidth?: number;
+  isLocked?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -67,9 +73,19 @@ export interface TextElement extends BaseElement {
 export interface StickyElement extends BaseElement {
   type: 'sticky';
   text: string;
-  color: string; // e.g., yellow, cyan, purple, lime
+  color: string;
   width: number;
   height: number;
+}
+
+export interface ImageElement extends BaseElement {
+  type: 'image';
+  src: string;
+  width: number;
+  height: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
+  alt?: string;
 }
 
 export interface FormulaElement extends BaseElement {
@@ -78,6 +94,60 @@ export interface FormulaElement extends BaseElement {
   renderedText: string;
   fontSize: number;
   color: string;
+  renderedSvg?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface GraphElement extends BaseElement {
+  type: 'graph';
+  expression: string; // e.g. "sin(x)", "x^2 - 4", "2*x + 1"
+  label: string;
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+  width: number;
+  height: number;
+  strokeColor: string;
+  showAxes?: boolean;
+  showGrid?: boolean;
+}
+
+export interface TableElement extends BaseElement {
+  type: 'table';
+  rows: number;
+  cols: number;
+  headers: string[];
+  data: string[][];
+  width: number;
+  height: number;
+  borderColor?: string;
+  headerBg?: string;
+}
+
+export type FlowchartNodeType = 'process' | 'decision' | 'terminator' | 'io';
+
+export interface FlowchartNodeElement extends BaseElement {
+  type: 'flowchart';
+  nodeType: FlowchartNodeType;
+  label: string;
+  width: number;
+  height: number;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+}
+
+export interface MindmapNodeElement extends BaseElement {
+  type: 'mindmap';
+  label: string;
+  parentId?: string; // root has no parentId
+  level: number; // 0 for root topic, 1 for branches, 2 for sub-branches
+  color: string;
+  width: number;
+  height: number;
+  isRoot?: boolean;
 }
 
 export type CanvasElement = 
@@ -85,7 +155,12 @@ export type CanvasElement =
   | ShapeElement 
   | TextElement 
   | StickyElement 
-  | FormulaElement;
+  | ImageElement
+  | FormulaElement
+  | GraphElement
+  | TableElement
+  | FlowchartNodeElement
+  | MindmapNodeElement;
 
 export interface Page {
   id: string;
@@ -93,6 +168,7 @@ export interface Page {
   elements: CanvasElement[];
   gridType: GridType;
   backgroundColor: string;
+  pdfBackground?: string; // Data URL for imported PDF background page
 }
 
 export interface WhiteboardProject {
@@ -103,10 +179,17 @@ export interface WhiteboardProject {
   tags: string[];
   ownerId: string;
   ownerEmail?: string;
+  isFavorite?: boolean;
+  isTrashed?: boolean;
+  trashedAt?: number;
+  sharedWith?: string[];
   pages: Page[];
   activePageIndex: number;
   driveFileId?: string;
   driveWebViewLink?: string;
+  driveRevisionId?: string;
+  driveSyncedAt?: number;
+  schemaVersion?: string;
   thumbnailUrl?: string;
   createdAt: number;
   updatedAt: number;

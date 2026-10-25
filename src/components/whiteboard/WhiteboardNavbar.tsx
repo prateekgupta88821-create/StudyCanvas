@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
-import { StatusPill } from '@/components/common/StatusPill';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { 
   ArrowLeft, 
@@ -15,7 +14,19 @@ import {
   Settings,
   Share2,
   Check,
-  Edit2
+  Edit2,
+  Maximize2,
+  Minimize2,
+  SlidersHorizontal,
+  Loader2,
+  AlertCircle,
+  CloudCheck,
+  Play,
+  LayoutTemplate,
+  AlertTriangle,
+  CloudOff,
+  KeyRound,
+  History
 } from 'lucide-react';
 
 export interface WhiteboardNavbarProps {
@@ -23,6 +34,8 @@ export interface WhiteboardNavbarProps {
   onOpenExport: () => void;
   onOpenSettings: () => void;
   onOpenPageDrawer: () => void;
+  onOpenTemplatesModal?: () => void;
+  onOpenVersionHistory?: () => void;
 }
 
 export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
@@ -30,6 +43,8 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
   onOpenExport,
   onOpenSettings,
   onOpenPageDrawer,
+  onOpenTemplatesModal,
+  onOpenVersionHistory,
 }) => {
   const { 
     project, 
@@ -42,6 +57,12 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
     syncToDrive,
     isSyncingDrive,
     activePageIndex,
+    saveStatus,
+    isFocusMode,
+    setIsFocusMode,
+    isPropertiesOpen,
+    setIsPropertiesOpen,
+    setIsPresentationMode,
   } = useWhiteboard();
 
   const { driveAccessToken } = useAuth();
@@ -64,10 +85,63 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  // Render visible save status
+  const renderSaveStatus = () => {
+    if (saveStatus === 'saving' || isSyncingDrive) {
+      return (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium" title="Saving your drawing...">
+          <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+          <span>Saving...</span>
+        </div>
+      );
+    }
+    if (saveStatus === 'conflict') {
+      return (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-medium cursor-pointer" title="Sync conflict detected. Click to resolve.">
+          <AlertTriangle className="h-3 w-3 text-rose-400" />
+          <span>Conflict</span>
+        </div>
+      );
+    }
+    if (saveStatus === 'auth_expired') {
+      return (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium cursor-pointer" title="Drive authorization expired. Work is saved in local recovery.">
+          <KeyRound className="h-3 w-3 text-amber-400" />
+          <span>Auth Expired</span>
+        </div>
+      );
+    }
+    if (saveStatus === 'offline') {
+      return (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-400 text-xs font-medium" title="Offline mode: Drawings safely preserved in recovery cache">
+          <CloudOff className="h-3 w-3 text-slate-400" />
+          <span>Offline</span>
+        </div>
+      );
+    }
+    if (saveStatus === 'error') {
+      return (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-medium" title="Cloud save failed. Drawing preserved in local recovery.">
+          <AlertCircle className="h-3 w-3 text-rose-400" />
+          <span>Save failed</span>
+        </div>
+      );
+    }
+    // Saved / Idle
+    return (
+      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-lime-500/10 border border-lime-500/20 text-lime-400 text-xs font-medium" title="All edits saved">
+        <Check className="h-3 w-3 text-lime-400" />
+        <span>Saved</span>
+      </div>
+    );
+  };
+
   return (
-    <header className="h-14 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl px-4 flex items-center justify-between z-30 select-none">
-      {/* Left section: Return button & Title */}
-      <div className="flex items-center gap-3 min-w-0">
+    <header className={`h-14 border-b border-slate-800/80 bg-[#090b0e]/90 backdrop-blur-xl px-3 sm:px-4 flex items-center justify-between z-30 select-none transition-all duration-200 ${
+      isFocusMode ? 'opacity-30 hover:opacity-100' : ''
+    }`}>
+      {/* Left section: Return button, Title, Subject badge & Save Status */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <Button
           variant="ghost"
           size="iconSm"
@@ -79,7 +153,7 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
         </Button>
 
         <div className="flex items-center gap-2 min-w-0">
-          <img src="/logo.svg" alt="StudyCanvas" className="h-7 w-7 shrink-0 hidden sm:block" />
+          <img src="/logo.svg" alt="StudyCanvas" className="h-7 w-7 shrink-0 hidden md:block" />
           
           {isEditingTitle ? (
             <input
@@ -89,40 +163,44 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
               onBlur={handleTitleSubmit}
               onKeyDown={(e) => e.key === 'Enter' && handleTitleSubmit()}
               autoFocus
-              className="bg-slate-900 border border-indigo-500 rounded-lg px-2 py-0.5 text-sm font-semibold text-white focus:outline-none max-w-xs"
+              className="bg-slate-900 border border-lime-500/60 rounded-lg px-2 py-0.5 text-sm font-semibold text-white focus:outline-none max-w-xs ring-1 ring-lime-500/30"
             />
           ) : (
             <div 
               onClick={() => setIsEditingTitle(true)}
               className="flex items-center gap-1.5 cursor-pointer group truncate"
-              title="Click to rename"
+              title="Click to rename project"
             >
-              <h1 className="text-sm font-semibold text-slate-100 group-hover:text-indigo-300 transition-colors truncate max-w-[200px] sm:max-w-xs">
+              <h1 className="text-sm font-semibold text-slate-100 group-hover:text-lime-300 transition-colors truncate max-w-[130px] sm:max-w-[200px] md:max-w-xs">
                 {project.title || 'Untitled Whiteboard'}
               </h1>
               <Edit2 className="h-3 w-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
             </div>
           )}
+
+          {/* Subject Badge */}
+          {project.subject && (
+            <span className="hidden lg:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60">
+              {project.subject}
+            </span>
+          )}
         </div>
 
-        {/* Sync status pill */}
-        <div className="hidden md:flex items-center">
-          <StatusPill 
-            state={isSyncingDrive ? 'syncing' : (project.driveFileId ? 'synced' : (driveAccessToken ? 'idle' : 'disconnected'))}
-            lastSyncedAt={project.updatedAt}
-          />
+        {/* Visible Save Status Pill */}
+        <div className="hidden sm:flex items-center ml-1">
+          {renderSaveStatus()}
         </div>
       </div>
 
-      {/* Center section: Undo/Redo & Page counter */}
-      <div className="flex items-center gap-1 bg-slate-900/60 border border-slate-800 rounded-xl p-1">
+      {/* Center section: Undo/Redo & Page selector */}
+      <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-800/90 rounded-xl p-0.5 sm:p-1 shadow-inner">
         <Button
           variant="ghost"
           size="iconSm"
           onClick={undo}
           disabled={!canUndo}
           title="Undo (Ctrl+Z)"
-          className="text-slate-300 disabled:opacity-30"
+          className="text-slate-300 disabled:opacity-25 hover:text-white"
         >
           <Undo2 className="h-4 w-4" />
         </Button>
@@ -132,7 +210,7 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
           onClick={redo}
           disabled={!canRedo}
           title="Redo (Ctrl+Y)"
-          className="text-slate-300 disabled:opacity-30"
+          className="text-slate-300 disabled:opacity-25 hover:text-white"
         >
           <Redo2 className="h-4 w-4" />
         </Button>
@@ -141,29 +219,96 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
 
         <button
           onClick={onOpenPageDrawer}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+          className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/60 transition-colors"
           title="View Slides & Pages"
         >
-          <Layers className="h-3.5 w-3.5 text-indigo-400" />
-          <span>Page {activePageIndex + 1} of {project.pages.length}</span>
+          <Layers className="h-3.5 w-3.5 text-lime-400" />
+          <span className="hidden xs:inline">Page</span>
+          <span>{activePageIndex + 1}/{project.pages.length}</span>
         </button>
       </div>
 
-      {/* Right section: Drive Sync, Export, Settings, User */}
-      <div className="flex items-center gap-2">
+      {/* Right section: Presentation, Templates, Focus Mode, Properties Toggle, Drive, Export, Settings, User */}
+      <div className="flex items-center gap-1 sm:gap-1.5">
+        {/* Presentation Mode */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsPresentationMode(true)}
+          title="Distraction-Free Presentation Mode (Shift+P)"
+          className="text-xs h-8 hidden md:inline-flex border-slate-700 bg-slate-900/80 text-slate-200 hover:text-white hover:border-lime-500/50"
+        >
+          <Play className="mr-1.5 h-3.5 w-3.5 text-lime-400 fill-lime-400/20" />
+          <span>Present</span>
+        </Button>
+
+        {/* Templates Modal */}
+        {onOpenTemplatesModal && (
+          <Button
+            variant="ghost"
+            size="iconSm"
+            onClick={onOpenTemplatesModal}
+            title="Educational Starter Templates"
+            className="text-slate-400 hover:text-lime-300 hidden lg:inline-flex"
+          >
+            <LayoutTemplate className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Focus Mode Toggle */}
+        <Button
+          variant="ghost"
+          size="iconSm"
+          onClick={() => setIsFocusMode((prev) => !prev)}
+          title={isFocusMode ? "Exit Focus Mode (F)" : "Focus Mode (F)"}
+          className={isFocusMode ? "text-lime-400 bg-lime-500/10" : "text-slate-400 hover:text-white"}
+        >
+          {isFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </Button>
+
+        {/* Collapsible Properties Panel Toggle */}
+        <Button
+          variant="ghost"
+          size="iconSm"
+          onClick={() => setIsPropertiesOpen((prev) => !prev)}
+          title="Toggle Properties Panel"
+          className={isPropertiesOpen ? "text-lime-400 bg-lime-500/10" : "text-slate-400 hover:text-white"}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+        </Button>
+
+        {/* Google Drive sync button */}
         {driveAccessToken && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => syncToDrive()}
             isLoading={isSyncingDrive}
-            className="hidden sm:inline-flex text-xs h-8 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10"
+            className="hidden xl:inline-flex text-xs h-8 border-lime-500/30 text-lime-400 hover:bg-lime-500/10"
           >
-            <HardDrive className="mr-1.5 h-3.5 w-3.5" />
-            Save to Drive
+            {project.driveFileId ? (
+              <CloudCheck className="mr-1.5 h-3.5 w-3.5 text-lime-400" />
+            ) : (
+              <HardDrive className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Drive
           </Button>
         )}
 
+        {/* Google Drive Version History */}
+        {onOpenVersionHistory && driveAccessToken && (
+          <Button
+            variant="ghost"
+            size="iconSm"
+            onClick={onOpenVersionHistory}
+            title="Google Drive Version History & Revisions"
+            className="text-slate-400 hover:text-lime-300 hidden lg:inline-flex"
+          >
+            <History className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Clear Slide Button */}
         <Button
           variant="ghost"
           size="iconSm"
@@ -172,32 +317,35 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
               clearPage();
             }
           }}
-          title="Clear Current Slide"
-          className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+          title="Clear Current Page"
+          className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 hidden md:inline-flex"
         >
           <Trash2 className="h-4 w-4" />
         </Button>
 
+        {/* Share Button */}
         <Button
           variant="ghost"
           size="iconSm"
           onClick={handleShare}
           title="Share Whiteboard Link"
-          className="text-slate-400 hover:text-white"
+          className="text-slate-400 hover:text-white hidden sm:inline-flex"
         >
           {copiedLink ? <Check className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
         </Button>
 
+        {/* Export Button */}
         <Button
           variant="default"
           size="sm"
           onClick={onOpenExport}
-          className="text-xs h-8 font-semibold shadow-none"
+          className="text-xs h-8 font-semibold shadow-none bg-lime-500 text-slate-950 hover:bg-lime-400"
         >
           <Download className="mr-1.5 h-3.5 w-3.5" />
-          Export
+          <span className="hidden sm:inline">Export</span>
         </Button>
 
+        {/* Settings */}
         <Button
           variant="ghost"
           size="iconSm"
@@ -208,7 +356,7 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
           <Settings className="h-4 w-4" />
         </Button>
 
-        <div className="pl-1">
+        <div className="pl-0.5">
           <UserMenu onOpenSettings={onOpenSettings} />
         </div>
       </div>

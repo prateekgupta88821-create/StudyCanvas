@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { authService, formatAuthError, type AuthErrorInfo } from '@/services/authService';
+import { googleIdentityService } from '@/services/googleIdentityService';
 import { AuthContextType, UserProfile, EducatorRole } from '@/types/auth';
 import { isFirebaseInitialized } from '@/config/firebase';
 import { useToast } from '@/hooks/useToast';
@@ -11,7 +12,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
-    return authService.getStoredDriveToken();
+    return googleIdentityService.getValidToken() || authService.getStoredDriveToken();
   });
   // Loading starts true only when Firebase is initialized so initial auth token is resolved without flicker
   const [loading, setLoading] = useState<boolean>(Boolean(isFirebaseInitialized));
@@ -135,6 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = useCallback(async () => {
     try {
       setLoading(true);
+      await googleIdentityService.revokeDriveAccess();
       await authService.signOut();
       setUser(null);
       setFirebaseUser(null);
@@ -153,10 +155,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshDriveToken = useCallback(async (): Promise<string | null> => {
     try {
-      const result = await authService.signInWithGoogle();
-      setDriveAccessToken(result.driveAccessToken);
-      return result.driveAccessToken;
-    } catch (e) {
+      if (googleIdentityService.isConfigured()) {
+        const token = await googleIdentityService.requestDriveAccessToken();
+        setDriveAccessToken(token);
+        return token;
+      }
+      // If GIS client ID is not yet configured, check stored token
+      const stored = googleIdentityService.getValidToken() || authService.getStoredDriveToken();
+      if (stored) {
+        setDriveAccessToken(stored);
+        return stored;
+      }
+      return null;
+    } catch (e: any) {
       console.warn('Could not refresh drive token:', e);
       return null;
     }

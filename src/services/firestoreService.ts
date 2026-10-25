@@ -46,6 +46,83 @@ export const firestoreService = {
   },
 
   /**
+   * Updates partial metadata on a project (title, subject, description, favorite, trash state)
+   */
+  async updateProjectMeta(projectId: string, updates: Partial<WhiteboardProject>): Promise<void> {
+    const updated = storage.updateProjectMeta(projectId, updates);
+
+    if (!db || !isFirebaseInitialized || !updated) {
+      return;
+    }
+
+    try {
+      const docRef = doc(db, COLLECTION_NAME, projectId);
+      await setDoc(docRef, { ...updates, updatedAt: Date.now() }, { merge: true });
+    } catch (error) {
+      console.warn('Error updating project meta in Firestore:', error);
+    }
+  },
+
+  /**
+   * Updates confirmed Google Drive file metadata in Firestore after successful Drive upload
+   */
+  async updateDriveSyncMetadata(
+    projectId: string,
+    syncData: {
+      driveFileId: string;
+      driveWebViewLink?: string;
+      driveRevisionId?: string;
+      driveSyncedAt: number;
+    }
+  ): Promise<void> {
+    await this.updateProjectMeta(projectId, {
+      ...syncData,
+      schemaVersion: '1.0',
+    });
+  },
+
+  /**
+   * Toggles the favorite status of a project
+   */
+  async toggleFavorite(projectId: string, currentFavorite: boolean): Promise<boolean> {
+    const nextState = !currentFavorite;
+    await this.updateProjectMeta(projectId, { isFavorite: nextState });
+    return nextState;
+  },
+
+  /**
+   * Soft deletes a project into Trash
+   */
+  async moveToTrash(projectId: string): Promise<void> {
+    await this.updateProjectMeta(projectId, { isTrashed: true, trashedAt: Date.now() });
+  },
+
+  /**
+   * Restores a soft-deleted project from Trash
+   */
+  async restoreFromTrash(projectId: string): Promise<void> {
+    await this.updateProjectMeta(projectId, { isTrashed: false, trashedAt: undefined });
+  },
+
+  /**
+   * Duplicates an existing project
+   */
+  async duplicateProject(projectId: string, customTitle?: string): Promise<WhiteboardProject | null> {
+    const copied = storage.duplicateProject(projectId, customTitle);
+    if (!copied) return null;
+
+    if (db && isFirebaseInitialized) {
+      try {
+        const docRef = doc(db, COLLECTION_NAME, copied.id);
+        await setDoc(docRef, copied);
+      } catch (e) {
+        console.warn('Could not sync duplicated project to Firestore:', e);
+      }
+    }
+    return copied;
+  },
+
+  /**
    * Fetches all projects owned by a specific user
    */
   async getUserProjects(userId: string): Promise<WhiteboardProject[]> {
@@ -77,7 +154,8 @@ export const firestoreService = {
    */
   subscribeToUserProjects(userId: string, callback: (projects: WhiteboardProject[]) => void) {
     if (!db || !isFirebaseInitialized) {
-      callback(storage.getProjects());
+      const local = storage.getProjects().filter(p => p.ownerId === userId || !p.ownerId);
+      callback(local);
       return () => {};
     }
 
@@ -98,7 +176,8 @@ export const firestoreService = {
       },
       (error) => {
         console.warn('Firestore subscription error, using local fallback:', error);
-        callback(storage.getProjects());
+        const local = storage.getProjects().filter(p => p.ownerId === userId || !p.ownerId);
+        callback(local);
       }
     );
   },
@@ -125,7 +204,7 @@ export const firestoreService = {
   },
 
   /**
-   * Deletes a project by ID
+   * Permanently deletes a project by ID
    */
   async deleteProject(projectId: string): Promise<void> {
     storage.deleteProject(projectId);
@@ -140,6 +219,23 @@ export const firestoreService = {
     } catch (error) {
       console.error('Error deleting project in Firestore:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Permanently empties all trashed projects for user
+   */
+  async emptyTrash(userId: string, trashedIds: string[]): Promise<void> {
+    storage.emptyTrash(userId);
+    if (!db || !isFirebaseInitialized) return;
+
+    try {
+      for (const id of trashedIds) {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        await deleteDoc(docRef);
+      }
+    } catch (e) {
+      console.warn('Error emptying trash in Firestore:', e);
     }
   }
 };

@@ -2,26 +2,26 @@ import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useFirestoreProjects } from '@/hooks/useFirestoreProjects';
 import { WhiteboardProject, WhiteboardTemplate } from '@/types/whiteboard';
-import { TemplateGallery } from '@/components/dashboard/TemplateGallery';
+import { DashboardSidebar, DashboardTab } from '@/components/dashboard/DashboardSidebar';
+import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
+import { DashboardFilterBar, SortOption, OwnershipFilter } from '@/components/dashboard/DashboardFilterBar';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
+import { CreateProjectModal, CreateProjectFormData } from '@/components/dashboard/CreateProjectModal';
+import { RenameProjectModal } from '@/components/dashboard/RenameProjectModal';
+import { ConfirmDeleteModal } from '@/components/dashboard/ConfirmDeleteModal';
+import { DashboardEmptyState } from '@/components/dashboard/DashboardEmptyState';
+import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
+import { TemplateGallery } from '@/components/dashboard/TemplateGallery';
 import { DriveImportModal } from '@/components/dashboard/DriveImportModal';
 import { SettingsModal } from '@/components/settings/SettingsModal';
-import { AuthModal } from '@/components/auth/AuthModal';
-import { UserMenu } from '@/components/auth/UserMenu';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Dialog } from '@/components/ui/Dialog';
 import { exportService } from '@/services/exportService';
-import { storage } from '@/utils/storage';
 import { 
   Plus, 
-  Search, 
-  HardDrive, 
   Upload, 
-  Layers, 
-  GraduationCap, 
-  BookOpen
+  Trash2, 
+  Sparkles
 } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 
 export interface DashboardPageProps {
   onOpenProject: (project: WhiteboardProject) => void;
@@ -29,7 +29,7 @@ export interface DashboardPageProps {
   onBackToLanding?: () => void;
 }
 
-const SUBJECT_FILTERS = [
+const DEFAULT_SUBJECTS = [
   'All',
   'Mathematics',
   'Physics',
@@ -42,31 +42,143 @@ const SUBJECT_FILTERS = [
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   onOpenProject,
   onCreateNewProject,
-  onBackToLanding,
+  onBackToLanding: _onBackToLanding,
 }) => {
   const { user } = useAuth();
-  const { projects, deleteProject, refresh } = useFirestoreProjects();
+  const {
+    projects,
+    loading,
+    error,
+    saveProject,
+    renameProject,
+    toggleFavorite,
+    moveToTrash,
+    restoreFromTrash,
+    duplicateProject,
+    deleteProject,
+    emptyTrash,
+    refresh,
+  } = useFirestoreProjects();
 
+  // Navigation & View state
+  const [activeTab, setActiveTab] = useState<DashboardTab>('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('All');
+  const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>('all');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>('updated-desc');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Modals state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [projectToRename, setProjectToRename] = useState<WhiteboardProject | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<{ project: WhiteboardProject; isPermanent: boolean } | null>(null);
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newSubject, setNewSubject] = useState('Mathematics');
+  const [isEmptyTrashConfirmOpen, setIsEmptyTrashConfirmOpen] = useState(false);
 
-  // Filter projects by search query and subject
+  // Pagination / Incremental loading
+  const [displayLimit, setDisplayLimit] = useState(12);
+
+  // Calculate tab counts
+  const counts = useMemo(() => {
+    let all = 0;
+    let favorites = 0;
+    let trash = 0;
+
+    for (const p of projects) {
+      if (p.isTrashed) {
+        trash++;
+      } else {
+        all++;
+        if (p.isFavorite) {
+          favorites++;
+        }
+      }
+    }
+
+    return { all, favorites, trash };
+  }, [projects]);
+
+  // Compute dynamic subject list based on projects
+  const availableSubjects = useMemo(() => {
+    const set = new Set<string>(DEFAULT_SUBJECTS);
+    for (const p of projects) {
+      if (p.subject && !p.isTrashed) {
+        set.add(p.subject);
+      }
+    }
+    return Array.from(set);
+  }, [projects]);
+
+  // Filter & Sort projects
   const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
-      const matchesSearch = 
-        p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.subject && p.subject.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesSubject = 
-        selectedSubject === 'All' || p.subject === selectedSubject;
-      return matchesSearch && matchesSubject;
-    });
-  }, [projects, searchQuery, selectedSubject]);
+    return projects
+      .filter((p) => {
+        // Tab-level filtering
+        if (activeTab === 'trash') {
+          if (!p.isTrashed) return false;
+        } else {
+          // For home, my-projects, shared, favorites: exclude trashed
+          if (p.isTrashed) return false;
+
+          if (activeTab === 'favorites' && !p.isFavorite) return false;
+          if (activeTab === 'shared' && (!p.sharedWith || p.sharedWith.length === 0)) return false;
+          if (activeTab === 'my-projects' && p.ownerId !== user?.uid) return false;
+        }
+
+        // Favorites quick toggle
+        if (favoritesOnly && !p.isFavorite) return false;
+
+        // Ownership dropdown filter
+        if (ownershipFilter === 'owned' && p.ownerId !== user?.uid) return false;
+        if (ownershipFilter === 'shared' && (!p.sharedWith || p.sharedWith.length === 0)) return false;
+
+        // Subject filter
+        if (selectedSubject !== 'All' && p.subject !== selectedSubject) return false;
+
+        // Global search query
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const matchesTitle = p.title.toLowerCase().includes(q);
+          const matchesSubject = p.subject?.toLowerCase().includes(q);
+          const matchesDesc = p.description?.toLowerCase().includes(q);
+          if (!matchesTitle && !matchesSubject && !matchesDesc) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'updated-desc':
+            return (b.updatedAt || 0) - (a.updatedAt || 0);
+          case 'updated-asc':
+            return (a.updatedAt || 0) - (b.updatedAt || 0);
+          case 'title-asc':
+            return (a.title || '').localeCompare(b.title || '');
+          case 'title-desc':
+            return (b.title || '').localeCompare(a.title || '');
+          case 'created-desc':
+            return (b.createdAt || 0) - (a.createdAt || 0);
+          default:
+            return 0;
+        }
+      });
+  }, [
+    projects,
+    activeTab,
+    favoritesOnly,
+    ownershipFilter,
+    selectedSubject,
+    searchQuery,
+    sortBy,
+    user?.uid,
+  ]);
+
+  const visibleProjects = useMemo(() => {
+    return filteredProjects.slice(0, displayLimit);
+  }, [filteredProjects, displayLimit]);
 
   // Handle uploading existing .studycanvas file
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,7 +187,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
     try {
       const imported = await exportService.importFromJSON(file);
-      storage.saveProject(imported);
+      await saveProject(imported);
       await refresh();
       onOpenProject(imported);
     } catch (err: any) {
@@ -83,254 +195,292 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsCreateModalOpen(false);
-    onCreateNewProject(newTitle || 'Untitled Lecture Whiteboard', newSubject);
+  const handleCreateProjectSubmit = (
+    _formData: CreateProjectFormData,
+    newProject: WhiteboardProject
+  ) => {
+    saveProject(newProject);
+    onOpenProject(newProject);
+  };
+
+  const handleCreateFromTemplate = (tmpl: WhiteboardTemplate) => {
+    onCreateNewProject(`${tmpl.name} Session`, tmpl.subject, tmpl);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-y-auto selection:bg-indigo-500 selection:text-white">
-      {/* Top Header Navbar */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-xl px-6 py-3.5 flex items-center justify-between">
-        <button
-          onClick={onBackToLanding}
-          className="flex items-center gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 rounded-lg p-1 group"
-        >
-          <img src="/logo.svg" alt="StudyCanvas" className="h-9 w-9 group-hover:scale-105 transition-transform" />
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-bold tracking-tight text-white group-hover:text-lime-400 transition-colors">
-                StudyCanvas
-              </span>
-              <span className="rounded-full bg-lime-400/10 px-2 py-0.5 text-[10px] font-semibold text-lime-400 border border-lime-400/25">
-                PRO
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              Interactive Whiteboards for Schools & Universities
-            </p>
-          </div>
-        </button>
+    <div className="flex h-screen w-screen overflow-hidden bg-[#090b0e] text-slate-100 selection:bg-lime-400 selection:text-slate-950">
+      {/* Left Navigation Sidebar */}
+      <DashboardSidebar
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setDisplayLimit(12);
+        }}
+        onCreateNew={() => setIsCreateModalOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        counts={counts}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+      />
 
-        <div className="flex items-center gap-2.5">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsDriveImportOpen(true)}
-            className="text-xs h-9 border-slate-750"
-          >
-            <HardDrive className="mr-1.5 h-3.5 w-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Google Drive</span>
-          </Button>
-
-          <label className="cursor-pointer">
-            <input
-              type="file"
-              accept=".studycanvas,.json"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <div className="inline-flex items-center justify-center rounded-xl border border-slate-750 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 transition-colors h-9">
-              <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-400" />
-              <span className="hidden sm:inline">Import File</span>
-            </div>
-          </label>
-
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="text-xs h-9 font-semibold"
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Canvas
-          </Button>
-
-          <div className="pl-1 border-l border-slate-800">
-            <UserMenu onOpenSettings={() => setIsSettingsOpen(true)} />
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Dashboard Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-8">
-        {/* Banner summary */}
-        <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 p-6 sm:p-8 shadow-2xl">
-          <div className="relative z-10 max-w-2xl space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 text-xs font-semibold text-indigo-300">
-              <GraduationCap className="h-3.5 w-3.5" />
-              <span>Welcome back, {user?.displayName || 'Educator'}</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              Your Digital Blackboard, Lecture Hall, and Study Room
-            </h2>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Create rich presentations, annotate mathematics formulas, illustrate scientific diagrams, and keep your lecture notes seamlessly synchronized with Google Drive.
-            </p>
-          </div>
-          {/* Subtle decorative glow */}
-          <div className="absolute right-0 top-0 -mr-16 -mt-16 h-72 w-72 rounded-full bg-indigo-600/10 blur-3xl pointer-events-none" />
-        </div>
-
-        {/* Template Gallery */}
-        <TemplateGallery
-          onSelectTemplate={(tmpl) => {
-            onCreateNewProject(`${tmpl.name} Session`, tmpl.subject, tmpl);
-          }}
+      {/* Main Content Area */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Top Header */}
+        <DashboardHeader
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          onOpenDriveModal={() => setIsDriveImportOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
-        {/* Recent Whiteboards Section */}
-        <div className="space-y-4 pt-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-indigo-400" />
-                <span>Your Whiteboard Sessions</span>
-              </h3>
-              <p className="text-xs text-slate-400">
-                {projects.length} {projects.length === 1 ? 'project' : 'projects'} saved
-              </p>
-            </div>
-
-            {/* Search Input */}
-            <div className="w-full sm:w-72">
-              <Input
-                type="text"
-                placeholder="Search lectures or subjects..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search className="h-4 w-4" />}
-                className="h-9 text-xs"
-              />
-            </div>
-          </div>
-
-          {/* Subject Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {SUBJECT_FILTERS.map((subj) => (
-              <button
-                key={subj}
-                onClick={() => setSelectedSubject(subj)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors shrink-0 ${
-                  selectedSubject === subj
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
-                }`}
-              >
-                {subj}
-              </button>
-            ))}
-          </div>
-
-          {/* Projects Grid */}
-          {filteredProjects.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/40 p-12 text-center text-slate-400">
-              <Layers className="h-10 w-10 mx-auto text-slate-600 mb-3" />
-              <h4 className="text-sm font-semibold text-slate-300">No Whiteboards Found</h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                {searchQuery
-                  ? `No whiteboards matching "${searchQuery}". Try clearing search.`
-                  : 'Start by creating your first lecture canvas or pick an educational template above.'}
-              </p>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => onCreateNewProject('First Lecture Canvas', 'General')}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                Create First Canvas
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredProjects.map((proj) => (
-                <ProjectCard
-                  key={proj.id}
-                  project={proj}
-                  onOpen={onOpenProject}
-                  onDelete={deleteProject}
-                />
-              ))}
+        {/* Scrollable Dashboard Body */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+          {/* Home Tab Greeting Banner */}
+          {activeTab === 'home' && !searchQuery && (
+            <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-r from-[#11151e] via-[#0f1422] to-[#121620] p-6 sm:p-8 shadow-2xl">
+              <div className="relative z-10 max-w-2xl space-y-3">
+                <div className="inline-flex items-center gap-2 rounded-full bg-lime-400/10 border border-lime-400/25 px-3 py-1 text-xs font-semibold text-lime-400">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Interactive Academic Whiteboard</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-heading">
+                  Your Digital Blackboard & Lecture Hall
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Annotate formulas, sketch scientific derivations, structure student notes, and store directly in Google Drive.
+                </p>
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="lime"
+                    size="sm"
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="text-xs font-semibold gap-1.5 h-9 px-4"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Create New Whiteboard</span>
+                  </Button>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".studycanvas,.json"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <div className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors h-9">
+                      <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-400" />
+                      <span>Import .studycanvas File</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              {/* Background radial glow */}
+              <div className="absolute right-0 top-0 -mr-16 -mt-16 h-72 w-72 rounded-full bg-lime-400/[0.08] blur-3xl pointer-events-none" />
             </div>
           )}
-        </div>
-      </main>
 
-      {/* Modal Dialogs */}
+          {/* Quick Starting Template Gallery on Home view */}
+          {activeTab === 'home' && !searchQuery && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white font-heading">
+                    Quick Starting Templates
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Jump straight into a pre-configured pedagogical layout
+                  </p>
+                </div>
+              </div>
+              <TemplateGallery onSelectTemplate={handleCreateFromTemplate} />
+            </div>
+          )}
+
+          {/* Section Title & Header for Tab */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+            <div>
+              <h2 className="text-lg font-bold text-white font-heading flex items-center gap-2">
+                {activeTab === 'home' && <span>Recent Whiteboards</span>}
+                {activeTab === 'my-projects' && <span>My Whiteboards</span>}
+                {activeTab === 'shared' && <span>Shared with Me</span>}
+                {activeTab === 'favorites' && <span>Favorite Whiteboards</span>}
+                {activeTab === 'trash' && <span>Trash Bin</span>}
+              </h2>
+              <p className="text-xs text-slate-400">
+                {activeTab === 'trash'
+                  ? 'Items in Trash can be restored anytime or deleted permanently.'
+                  : `Showing ${filteredProjects.length} of ${counts.all} active educational canvases`}
+              </p>
+            </div>
+
+            {/* Trash Bin Actions */}
+            {activeTab === 'trash' && counts.trash > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setIsEmptyTrashConfirmOpen(true)}
+                className="text-xs gap-1.5 h-8"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Empty Trash</span>
+              </Button>
+            )}
+          </div>
+
+          {/* Error Banner */}
+          {error && (
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-300 flex items-center justify-between">
+              <span>{error}</span>
+              <Button size="sm" variant="outline" onClick={refresh} className="h-7 text-xs">
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {/* Filter, Sort & View Controls */}
+          {activeTab !== 'trash' && (
+            <DashboardFilterBar
+              subjects={availableSubjects}
+              selectedSubject={selectedSubject}
+              onSelectSubject={setSelectedSubject}
+              ownership={ownershipFilter}
+              onSelectOwnership={setOwnershipFilter}
+              favoritesOnly={favoritesOnly}
+              onToggleFavoritesOnly={() => setFavoritesOnly((prev) => !prev)}
+              sortBy={sortBy}
+              onSelectSortBy={setSortBy}
+              viewMode={viewMode}
+              onToggleViewMode={setViewMode}
+              totalCount={filteredProjects.length}
+            />
+          )}
+
+          {/* Project List / Grid / Skeletons / Empty State */}
+          {loading ? (
+            <DashboardSkeleton viewMode={viewMode} count={viewMode === 'grid' ? 8 : 6} />
+          ) : filteredProjects.length === 0 ? (
+            <DashboardEmptyState
+              tab={activeTab}
+              searchQuery={searchQuery}
+              onClearSearch={() => setSearchQuery('')}
+              onCreateNew={() => setIsCreateModalOpen(true)}
+            />
+          ) : (
+            <div className="space-y-4">
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {visibleProjects.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      viewMode="grid"
+                      isTrashView={activeTab === 'trash'}
+                      onOpen={onOpenProject}
+                      onRename={(p) => setProjectToRename(p)}
+                      onDuplicate={(p) => duplicateProject(p.id)}
+                      onToggleFavorite={(id, cur) => toggleFavorite(id, cur)}
+                      onMoveToTrash={(id, title) => moveToTrash(id, title)}
+                      onRestore={(id, title) => restoreFromTrash(id, title)}
+                      onDeletePermanent={(p) => setProjectToDelete({ project: p, isPermanent: true })}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {visibleProjects.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      viewMode="list"
+                      isTrashView={activeTab === 'trash'}
+                      onOpen={onOpenProject}
+                      onRename={(p) => setProjectToRename(p)}
+                      onDuplicate={(p) => duplicateProject(p.id)}
+                      onToggleFavorite={(id, cur) => toggleFavorite(id, cur)}
+                      onMoveToTrash={(id, title) => moveToTrash(id, title)}
+                      onRestore={(id, title) => restoreFromTrash(id, title)}
+                      onDeletePermanent={(p) => setProjectToDelete({ project: p, isPermanent: true })}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Load More Pagination */}
+              {filteredProjects.length > displayLimit && (
+                <div className="flex justify-center pt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDisplayLimit((prev) => prev + 12)}
+                    className="text-xs"
+                  >
+                    Load More Whiteboards ({filteredProjects.length - displayLimit} remaining)
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Create Whiteboard Modal */}
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateProjectSubmit}
+        userId={user?.uid || 'guest'}
+        userEmail={user?.email}
+      />
+
+      {/* Rename / Edit Project Details Modal */}
+      <RenameProjectModal
+        project={projectToRename}
+        isOpen={Boolean(projectToRename)}
+        onClose={() => setProjectToRename(null)}
+        onRename={renameProject}
+      />
+
+      {/* Delete / Move to Trash Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={Boolean(projectToDelete)}
+        onClose={() => setProjectToDelete(null)}
+        title={projectToDelete?.project.title || 'Whiteboard'}
+        isPermanent={projectToDelete?.isPermanent}
+        onConfirm={() => {
+          if (projectToDelete) {
+            deleteProject(projectToDelete.project.id);
+            setProjectToDelete(null);
+          }
+        }}
+      />
+
+      {/* Empty Trash Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isEmptyTrashConfirmOpen}
+        onClose={() => setIsEmptyTrashConfirmOpen(false)}
+        title="All Trashed Whiteboards"
+        isPermanent={true}
+        onConfirm={() => {
+          emptyTrash();
+          setIsEmptyTrashConfirmOpen(false);
+        }}
+      />
+
+      {/* Google Drive Import Modal */}
       <DriveImportModal
         isOpen={isDriveImportOpen}
         onClose={() => setIsDriveImportOpen(false)}
         onImport={(proj) => {
+          saveProject(proj);
           onOpenProject(proj);
         }}
       />
 
+      {/* Preferences & Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
-
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-      />
-
-      {/* Create Project Modal */}
-      <Dialog
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title="Create New Whiteboard"
-        description="Set up a new lecture canvas session with your desired academic subject."
-      >
-        <form onSubmit={handleCreateSubmit} className="space-y-4 pt-2">
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1.5">
-              Whiteboard Title
-            </label>
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="e.g. Linear Algebra: Vector Spaces"
-              required
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1.5">
-              Academic Subject
-            </label>
-            <select
-              value={newSubject}
-              onChange={(e) => setNewSubject(e.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="Mathematics">Mathematics</option>
-              <option value="Physics">Physics</option>
-              <option value="Chemistry">Chemistry</option>
-              <option value="Computer Science">Computer Science</option>
-              <option value="Biology">Biology</option>
-              <option value="General">General Education</option>
-            </select>
-          </div>
-
-          <div className="pt-2 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsCreateModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" size="sm">
-              Create Canvas
-            </Button>
-          </div>
-        </form>
-      </Dialog>
     </div>
   );
 };

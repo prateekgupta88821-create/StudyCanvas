@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { ShapeType } from '@/types/whiteboard';
@@ -18,22 +18,60 @@ import {
   StickyNote, 
   Sigma, 
   Flame,
-  ChevronUp
+  ChevronRight,
+  Disc,
+  Activity,
+  Table as TableIcon,
+  Workflow,
+  Network,
+  FileUp,
+  LayoutTemplate,
+  Crop
 } from 'lucide-react';
 
-export const WhiteboardToolbar: React.FC<{ onOpenFormulaModal: () => void }> = ({
+export interface WhiteboardToolbarProps {
+  onOpenFormulaModal: () => void;
+  onOpenGraphModal: () => void;
+  onOpenTableModal: () => void;
+  onOpenFlowchartModal: () => void;
+  onOpenMindmapModal: () => void;
+  onOpenPdfImportModal: () => void;
+  onOpenTemplatesModal: () => void;
+  onOpenImageCropModal: () => void;
+}
+
+export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
   onOpenFormulaModal,
+  onOpenGraphModal,
+  onOpenTableModal,
+  onOpenFlowchartModal,
+  onOpenMindmapModal,
+  onOpenPdfImportModal,
+  onOpenTemplatesModal,
+  onOpenImageCropModal,
 }) => {
-  const { tool, setTool, shapeType, setShapeType } = useWhiteboard();
+  const { 
+    tool, 
+    setTool, 
+    shapeType, 
+    setShapeType, 
+    isFocusMode,
+    addElement,
+    scale,
+    stagePos,
+  } = useWhiteboard();
+
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
     { type: 'rectangle', label: 'Rectangle', icon: <Square className="h-4 w-4" /> },
     { type: 'circle', label: 'Circle', icon: <Circle className="h-4 w-4" /> },
+    { type: 'ellipse', label: 'Ellipse', icon: <Disc className="h-4 w-4" /> },
+    { type: 'line', label: 'Line', icon: <Minus className="h-4 w-4" /> },
+    { type: 'arrow', label: 'Arrow', icon: <ArrowRight className="h-4 w-4" /> },
     { type: 'triangle', label: 'Triangle', icon: <Triangle className="h-4 w-4" /> },
     { type: 'star', label: 'Star', icon: <Star className="h-4 w-4" /> },
-    { type: 'arrow', label: 'Arrow', icon: <ArrowRight className="h-4 w-4" /> },
-    { type: 'line', label: 'Line', icon: <Minus className="h-4 w-4" /> },
   ];
 
   const handleSelectShape = (type: ShapeType) => {
@@ -47,74 +85,142 @@ export const WhiteboardToolbar: React.FC<{ onOpenFormulaModal: () => void }> = (
     return found ? found.icon : <Square className="h-4 w-4" />;
   };
 
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const img = new window.Image();
+      img.src = dataUrl;
+      img.onload = () => {
+        const maxWidth = 350;
+        const aspect = img.width / img.height;
+        const width = Math.min(img.width, maxWidth);
+        const height = width / aspect;
+
+        // Place image in center of current viewport
+        const centerX = (window.innerWidth / 2 - stagePos.x) / scale - width / 2;
+        const centerY = (window.innerHeight / 2 - stagePos.y) / scale - height / 2;
+
+        addElement({
+          id: 'image_' + Math.random().toString(36).substring(2, 9),
+          type: 'image',
+          src: dataUrl,
+          x: Math.max(20, centerX),
+          y: Math.max(20, centerY),
+          width,
+          height,
+          naturalWidth: img.width,
+          naturalHeight: img.height,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        setTool('select');
+      };
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // In Focus mode, hide the left palette
+  if (isFocusMode) {
+    return null;
+  }
+
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 select-none">
+    <div className="fixed left-4 top-20 z-40 select-none">
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        initial={{ x: -20, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="flex items-center gap-1 rounded-2xl border border-slate-800/90 bg-slate-900/90 p-1.5 shadow-2xl backdrop-blur-xl"
+        className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800/90 bg-[#0c1017]/95 p-1.5 shadow-2xl backdrop-blur-xl"
       >
-        {/* Select Tool */}
+        {/* Hidden file input for image upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageFileChange}
+        />
+
+        {/* 1. Select Tool */}
         <button
-          onClick={() => setTool('select')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={() => {
+            setTool('select');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'select'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
-          title="Select & Move (V)"
+          title="Select & Transform (V)"
         >
           <MousePointer className="h-4 w-4" />
         </button>
 
-        {/* Pan Hand Tool */}
+        {/* 2. Hand / Pan Tool */}
         <button
-          onClick={() => setTool('pan')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={() => {
+            setTool('pan');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'pan'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
-          title="Pan / Hand Tool"
+          title="Pan / Hand Tool (H or Space+Drag)"
         >
           <Hand className="h-4 w-4" />
         </button>
 
-        <div className="h-6 w-[1px] bg-slate-800 mx-0.5" />
+        <div className="h-[1px] w-6 bg-slate-800 my-0.5" />
 
-        {/* Freehand Pen */}
+        {/* 3. Pen */}
         <button
-          onClick={() => setTool('pen')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={() => {
+            setTool('pen');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'pen'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
-          title="Pen / Pencil (P)"
+          title="Pen / Freehand (P)"
         >
           <PenTool className="h-4 w-4" />
         </button>
 
-        {/* Highlighter */}
+        {/* 4. Highlighter */}
         <button
-          onClick={() => setTool('highlighter')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={() => {
+            setTool('highlighter');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'highlighter'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
-          title="Highlighter (H)"
+          title="Highlighter (B)"
         >
           <Highlighter className="h-4 w-4" />
         </button>
 
-        {/* Eraser */}
+        {/* 5. Eraser */}
         <button
-          onClick={() => setTool('eraser')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={() => {
+            setTool('eraser');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'eraser'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Eraser (E)"
@@ -122,113 +228,182 @@ export const WhiteboardToolbar: React.FC<{ onOpenFormulaModal: () => void }> = (
           <Eraser className="h-4 w-4" />
         </button>
 
-        <div className="h-6 w-[1px] bg-slate-800 mx-0.5" />
+        <div className="h-[1px] w-6 bg-slate-800 my-0.5" />
 
-        {/* Shapes Menu Dropdown */}
+        {/* 6. Shape Menu with Flyout */}
         <div className="relative">
           <button
             onClick={() => {
               if (tool === 'shape') {
-                setShapeMenuOpen(prev => !prev);
+                setShapeMenuOpen(!shapeMenuOpen);
               } else {
                 setTool('shape');
+                setShapeMenuOpen(true);
               }
             }}
-            className={`flex h-10 items-center gap-1 px-2.5 rounded-xl transition-all ${
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all relative ${
               tool === 'shape'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
                 : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
             }`}
-            title="Geometric Shapes (R)"
+            title="Geometric Shapes (S)"
           >
             {getShapeIcon()}
-            <ChevronUp className="h-3 w-3 opacity-70" />
+            <ChevronRight className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 opacity-70" />
           </button>
 
           <AnimatePresence>
             {shapeMenuOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setShapeMenuOpen(false)} 
-                />
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute bottom-12 left-0 mb-2 w-44 rounded-2xl border border-slate-800 bg-slate-900/95 p-1.5 shadow-2xl backdrop-blur-xl z-50 grid grid-cols-2 gap-1"
-                >
-                  {shapes.map((s) => (
-                    <button
-                      key={s.type}
-                      onClick={() => handleSelectShape(s.type)}
-                      className={`flex items-center gap-2 rounded-xl p-2 text-xs font-medium transition-colors ${
-                        shapeType === s.type
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      {s.icon}
-                      <span>{s.label}</span>
-                    </button>
-                  ))}
-                </motion.div>
-              </>
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="absolute left-12 top-0 z-50 flex flex-col gap-1 rounded-xl border border-slate-800 bg-[#0f141d] p-1.5 shadow-2xl backdrop-blur-xl min-w-[130px]"
+              >
+                {shapes.map((s) => (
+                  <button
+                    key={s.type}
+                    onClick={() => handleSelectShape(s.type)}
+                    className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
+                      shapeType === s.type && tool === 'shape'
+                        ? 'bg-lime-500/20 text-lime-400 font-semibold'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {s.icon}
+                    <span>{s.label}</span>
+                  </button>
+                ))}
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Text Annotation */}
+        {/* 7. Text Tool */}
         <button
-          onClick={() => setTool('text')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={() => {
+            setTool('text');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'text'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
-          title="Text Label / Notes (T)"
+          title="Text Note (T)"
         >
           <Type className="h-4 w-4" />
         </button>
 
-        {/* Sticky Notes */}
+        {/* 8. Sticky Note */}
         <button
-          onClick={() => setTool('sticky')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={() => {
+            setTool('sticky');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'sticky'
-              ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/30'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-amber-300'
+              ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/20'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
-          title="Sticky Note (S)"
+          title="Sticky Note (N)"
         >
           <StickyNote className="h-4 w-4" />
         </button>
 
-        {/* Educational Math Formula / Equation */}
+        {/* 9. Image Upload & Crop */}
+        <div className="relative group">
+          <button
+            onClick={onOpenImageCropModal}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-lime-300 transition-all"
+            title="Image Upload & Aspect Ratio Framing"
+          >
+            <Crop className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="h-[1px] w-6 bg-slate-800 my-0.5" />
+
+        {/* Educational Tools Section */}
+        {/* 10. Math Formula / LaTeX */}
         <button
-          onClick={() => {
-            setTool('formula');
-            onOpenFormulaModal();
-          }}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-            tool === 'formula'
-              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-purple-300'
-          }`}
-          title="Math Formula & Science Stamps (M)"
+          onClick={onOpenFormulaModal}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-lime-400 transition-all"
+          title="Math Formula & LaTeX (M)"
         >
           <Sigma className="h-4 w-4" />
         </button>
 
-        {/* Laser Pointer */}
+        {/* 11. Function Graph Plotter */}
         <button
-          onClick={() => setTool('laser')}
-          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+          onClick={onOpenGraphModal}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition-all"
+          title="2D Function Graph Plotter (G)"
+        >
+          <Activity className="h-4 w-4" />
+        </button>
+
+        {/* 12. Flowchart Builder */}
+        <button
+          onClick={onOpenFlowchartModal}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-emerald-400 transition-all"
+          title="Flowchart & Logic Nodes"
+        >
+          <Workflow className="h-4 w-4" />
+        </button>
+
+        {/* 13. Mind Map Creator */}
+        <button
+          onClick={onOpenMindmapModal}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-amber-400 transition-all"
+          title="Mind Map & Concept Tree"
+        >
+          <Network className="h-4 w-4" />
+        </button>
+
+        {/* 14. Lecture Notes & Comparison Table */}
+        <button
+          onClick={onOpenTableModal}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-purple-400 transition-all"
+          title="Comparison & Lecture Table"
+        >
+          <TableIcon className="h-4 w-4" />
+        </button>
+
+        <div className="h-[1px] w-6 bg-slate-800 my-0.5" />
+
+        {/* 15. PDF Import for Slide Annotation */}
+        <button
+          onClick={onOpenPdfImportModal}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-rose-400 transition-all"
+          title="Import PDF Slides & Exam Papers"
+        >
+          <FileUp className="h-4 w-4" />
+        </button>
+
+        {/* 16. Subject Templates */}
+        <button
+          onClick={onOpenTemplatesModal}
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-lime-400 transition-all"
+          title="Educational Starter Templates"
+        >
+          <LayoutTemplate className="h-4 w-4" />
+        </button>
+
+        <div className="h-[1px] w-6 bg-slate-800 my-0.5" />
+
+        {/* 17. Laser Pointer */}
+        <button
+          onClick={() => {
+            setTool('laser');
+            setShapeMenuOpen(false);
+          }}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
             tool === 'laser'
-              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-rose-400'
+              ? 'bg-red-500 text-white font-bold shadow-lg shadow-red-500/30'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-red-400'
           }`}
-          title="Laser Pointer for Lectures (L)"
+          title="Laser Pointer (L)"
         >
           <Flame className="h-4 w-4" />
         </button>

@@ -1,20 +1,35 @@
 import { useEffect } from 'react';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
 
-export function useKeyboardShortcuts() {
+export interface UseKeyboardShortcutsOptions {
+  onOpenShortcuts?: () => void;
+  onOpenImageUpload?: () => void;
+  onOpenFormulaModal?: () => void;
+  onOpenGraphModal?: () => void;
+}
+
+export function useKeyboardShortcuts(options?: UseKeyboardShortcutsOptions) {
   const {
     setTool,
     undo,
     redo,
     saveProject,
-    deleteElement,
-    selectedElementId,
-    setSelectedElementId,
+    deleteSelected,
+    duplicateSelected,
+    copySelected,
+    pasteSelected,
+    selectAll,
+    setSelectedElementIds,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    setIsFocusMode,
+    setIsPresentationMode,
   } = useWhiteboard();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when user is typing in an input or textarea
+      // Don't trigger shortcuts when user is typing in an input, textarea, or contentEditable element
       const target = e.target as HTMLElement;
       if (
         target.tagName === 'INPUT' || 
@@ -24,7 +39,7 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
 
       // Undo: Ctrl/Cmd + Z
@@ -48,17 +63,83 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Delete selected element
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId) {
+      // Copy: Ctrl/Cmd + C
+      if (cmdOrCtrl && e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        deleteElement(selectedElementId);
+        copySelected();
         return;
       }
 
-      // Escape key: deselect or switch to select tool
+      // Paste: Ctrl/Cmd + V
+      if (cmdOrCtrl && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        pasteSelected();
+        return;
+      }
+
+      // Duplicate: Ctrl/Cmd + D
+      if (cmdOrCtrl && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+      }
+
+      // Select All: Ctrl/Cmd + A
+      if (cmdOrCtrl && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        selectAll();
+        return;
+      }
+
+      // Delete selected elements
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelected();
+        return;
+      }
+
+      // Escape key: deselect elements or switch back to select tool
       if (e.key === 'Escape') {
-        setSelectedElementId(null);
+        setSelectedElementIds([]);
         setTool('select');
+        return;
+      }
+
+      // Zoom shortcuts: + / = to zoom in, - to zoom out, 0 to reset
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        zoomIn();
+        return;
+      }
+      if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        zoomOut();
+        return;
+      }
+      if (e.key === '0') {
+        e.preventDefault();
+        resetZoom();
+        return;
+      }
+
+      // Focus Mode toggle: F key
+      if (!cmdOrCtrl && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setIsFocusMode((prev) => !prev);
+        return;
+      }
+
+      // Shortcuts modal trigger: ? or Shift + /
+      if (e.key === '?' && options?.onOpenShortcuts) {
+        e.preventDefault();
+        options.onOpenShortcuts();
+        return;
+      }
+
+      // Presentation Mode: F5 or Shift + P
+      if ((e.shiftKey && e.key.toLowerCase() === 'p') || e.key === 'F5') {
+        e.preventDefault();
+        setIsPresentationMode(true);
         return;
       }
 
@@ -68,26 +149,45 @@ export function useKeyboardShortcuts() {
           case 'v':
             setTool('select');
             break;
+          case 'h':
+            setTool('pan');
+            break;
           case 'p':
             setTool('pen');
             break;
-          case 'h':
+          case 'b':
             setTool('highlighter');
             break;
           case 'e':
             setTool('eraser');
             break;
-          case 'r':
+          case 's':
             setTool('shape');
             break;
           case 't':
             setTool('text');
             break;
-          case 's':
+          case 'n':
             setTool('sticky');
             break;
+          case 'g':
+            if (options?.onOpenGraphModal) {
+              options.onOpenGraphModal();
+            }
+            break;
+          case 'i':
+            if (options?.onOpenImageUpload) {
+              options.onOpenImageUpload();
+            } else {
+              setTool('image');
+            }
+            break;
           case 'm':
-            setTool('formula');
+            if (options?.onOpenFormulaModal) {
+              options.onOpenFormulaModal();
+            } else {
+              setTool('formula');
+            }
             break;
           case 'l':
             setTool('laser');
@@ -98,5 +198,22 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setTool, undo, redo, saveProject, deleteElement, selectedElementId, setSelectedElementId]);
+  }, [
+    setTool, 
+    undo, 
+    redo, 
+    saveProject, 
+    deleteSelected, 
+    duplicateSelected, 
+    copySelected, 
+    pasteSelected, 
+    selectAll, 
+    setSelectedElementIds,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    setIsFocusMode,
+    setIsPresentationMode,
+    options,
+  ]);
 }

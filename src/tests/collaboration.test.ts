@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { collaborationService } from '@/services/collaborationService';
 import {
-  Collaborator,
-  CollaboratorRole,
   CollaboratorCursor,
   WhiteboardComment,
   PresentationFollowState,
@@ -275,6 +273,7 @@ describe('Real-Time Collaboration Service & Role-Based Permissions', () => {
 
       // Presenter stops presentation
       await collaborationService.stopPresentation(testProjectId);
+      expect(followed).toBeNull();
       unsubscribe();
     });
   });

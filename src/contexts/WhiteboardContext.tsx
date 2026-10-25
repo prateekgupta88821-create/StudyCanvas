@@ -201,7 +201,9 @@ export const WhiteboardProvider: React.FC<{
     if (persistenceService.hasNewerRecovery(project)) {
       const draft = persistenceService.getRecoveryDraft(project.id);
       if (draft) {
-        setRecoveryDraft(draft);
+        queueMicrotask(() => {
+          setRecoveryDraft(draft);
+        });
       }
     }
 
@@ -225,6 +227,7 @@ export const WhiteboardProvider: React.FC<{
     return () => {
       unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
   const activePage = project.pages[activePageIndex] || project.pages[0] || defaultInitialPage;

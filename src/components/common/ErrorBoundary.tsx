@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { logger } from '@/utils/logger';
 
 interface Props {
   children: ReactNode;
@@ -22,7 +23,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('StudyCanvas Uncaught Exception:', error, errorInfo);
+    logger.error('StudyCanvas Uncaught React Exception', {
+      errorName: error.name,
+      errorMessage: error.message,
+      componentStack: errorInfo.componentStack,
+    }, 'ErrorBoundary');
   }
 
   public render() {

@@ -1,5 +1,5 @@
 import { WhiteboardProject, Page, CanvasElement, ImageElement } from '@/types/whiteboard';
-import { DriveAssetManifest, DriveAssetManifestItem } from '@/types/drive';
+import { DriveAssetManifest } from '@/types/drive';
 
 const ASSET_PREFIX = 'asset://';
 const MAX_INLINE_ASSET_SIZE = 32 * 1024; // 32 KB threshold for externalization
@@ -22,7 +22,7 @@ class AssetStorageService {
   /**
    * Stores an asset in memory cache and returns its asset URI
    */
-  registerAsset(dataUrl: string, mimeType = 'image/png'): string {
+  registerAsset(dataUrl: string, _mimeType = 'image/png'): string {
     const hash = this.hashString(dataUrl);
     const assetId = `asset_${hash}`;
     this.memoryCache.set(assetId, dataUrl);

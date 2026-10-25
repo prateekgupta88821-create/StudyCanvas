@@ -376,7 +376,7 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
           className="text-xs h-8 border-slate-700 bg-slate-900/80 text-slate-200 hover:text-white hover:border-lime-500/50 hidden sm:inline-flex"
         >
           <Share2 className="mr-1.5 h-3.5 w-3.5 text-lime-400" />
-          <span>Share</span>
+          <span>{copiedLink ? 'Copied!' : 'Share'}</span>
         </Button>
 
         {/* Export Button */}

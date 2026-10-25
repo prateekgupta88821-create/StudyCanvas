@@ -51,6 +51,7 @@ export const PresentationFollowBanner: React.FC = () => {
     activePage.id,
     user?.uid,
     user?.displayName,
+    activeSession?.presenterId,
   ]);
 
   // Viewers listen to presentation state

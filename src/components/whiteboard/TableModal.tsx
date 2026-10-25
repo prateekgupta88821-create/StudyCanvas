@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
@@ -54,9 +54,10 @@ export const TableModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   const [header2, setHeader2] = useState('Group A');
   const [header3, setHeader3] = useState('Group B');
 
-  const handleInsertCustomTable = () => {
+  const handleInsertCustomTable = useCallback(() => {
     const centerX = (window.innerWidth / 2 - stagePos.x) / scale - 200;
     const centerY = (window.innerHeight / 2 - stagePos.y) / scale - 100;
+    const now = Date.now();
 
     const headers = [header1, header2, header3];
     const data: string[][] = [];
@@ -81,17 +82,18 @@ export const TableModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       data,
       borderColor: '#334155',
       headerBg: '#1e293b',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     };
 
     addElement(newTable);
     onClose();
-  };
+  }, [stagePos, scale, header1, header2, header3, rows, cols, addElement, onClose]);
 
-  const handleInsertPresetTable = (preset: typeof PRESET_TABLES[0]) => {
+  const handleInsertPresetTable = useCallback((preset: typeof PRESET_TABLES[0]) => {
     const centerX = (window.innerWidth / 2 - stagePos.x) / scale - 220;
     const centerY = (window.innerHeight / 2 - stagePos.y) / scale - 120;
+    const now = Date.now();
 
     const newTable: TableElement = {
       id: 'table_' + Math.random().toString(36).substring(2, 9),
@@ -106,13 +108,13 @@ export const TableModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       data: preset.sampleData,
       borderColor: '#334155',
       headerBg: '#1e293b',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     };
 
     addElement(newTable);
     onClose();
-  };
+  }, [stagePos, scale, addElement, onClose]);
 
   return (
     <Dialog

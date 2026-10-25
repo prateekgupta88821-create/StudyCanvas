@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { 
-  PersistenceService, 
-  TAB_ID 
+  PersistenceService 
 } from '@/services/persistenceService';
 import { firestoreService } from '@/services/firestoreService';
 import { 

@@ -2,8 +2,6 @@
  * StudyCanvas Real-Time Collaboration & Role-Based Access Types
  */
 
-import { CanvasElement } from './whiteboard';
-
 export type CollaboratorRole = 'owner' | 'editor' | 'commenter' | 'viewer';
 
 export interface Collaborator {

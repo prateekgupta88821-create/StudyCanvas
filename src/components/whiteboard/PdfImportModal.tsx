@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { convertPdfToImages } from '@/services/pdfService';
 import { Page, ImageElement } from '@/types/whiteboard';
-import { FileUp, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { FileUp, Loader2, AlertCircle } from 'lucide-react';
 
 export const PdfImportModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   isOpen,

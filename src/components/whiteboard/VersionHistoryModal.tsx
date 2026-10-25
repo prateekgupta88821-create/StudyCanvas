@@ -26,43 +26,50 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const handleClose = () => {
+    setRevisions([]);
+    setError(null);
+    setSuccessMsg(null);
+    onClose();
+  };
+
   useEffect(() => {
-    if (!isOpen) {
-      setRevisions([]);
-      setError(null);
-      setSuccessMsg(null);
+    if (!isOpen || !project.driveFileId) {
       return;
     }
 
-    if (!project.driveFileId) {
-      return;
-    }
+    let isCancelled = false;
 
     const fetchRevisions = async () => {
       setIsLoading(true);
       setError(null);
+      setSuccessMsg(null);
       try {
         let token = googleIdentityService.getValidToken() || driveAccessToken;
         if (!token && googleIdentityService.isConfigured()) {
           token = await googleIdentityService.requestDriveAccessToken();
         }
         if (!token) {
-          setError('Google Drive access token missing. Please authorize Google Drive in settings.');
+          if (!isCancelled) setError('Google Drive access token missing. Please authorize Google Drive in settings.');
           return;
         }
 
         const list = await googleDriveService.listFileRevisions(project.driveFileId!, token);
         // Sort newest first
         list.sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime());
-        setRevisions(list);
+        if (!isCancelled) setRevisions(list);
       } catch (err: any) {
-        setError(err.message || 'Failed to load version history.');
+        if (!isCancelled) setError(err.message || 'Failed to load version history.');
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) setIsLoading(false);
       }
     };
 
     fetchRevisions();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [isOpen, project.driveFileId, driveAccessToken]);
 
   const handleRestore = async (revisionId: string) => {
@@ -100,7 +107,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   return (
     <Dialog
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title="Google Drive Version History"
       description={`Revision history for "${project.title}"`}
       maxWidth="max-w-lg"

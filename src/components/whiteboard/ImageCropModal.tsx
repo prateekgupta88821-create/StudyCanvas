@@ -3,7 +3,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { ImageElement } from '@/types/whiteboard';
-import { Crop, Upload, Check, Sparkles } from 'lucide-react';
+import { Crop, Upload, Check } from 'lucide-react';
 
 export interface ImageCropModalProps {
   isOpen: boolean;

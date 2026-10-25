@@ -121,7 +121,9 @@ export const AiAssistantPanel: React.FC<AiAssistantPanelProps> = ({
     if (selectedElements.length > 0) {
       const formulaEl = selectedElements.find(e => e.type === 'formula') as FormulaElement | undefined;
       if (formulaEl?.latex) {
-        setMathInput(formulaEl.latex);
+        queueMicrotask(() => {
+          setMathInput(formulaEl.latex);
+        });
       }
     }
   }, [selectedElements]);

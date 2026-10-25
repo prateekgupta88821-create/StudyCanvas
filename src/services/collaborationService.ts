@@ -9,7 +9,6 @@
 import {
   collection,
   doc,
-  getDocs,
   getDoc,
   setDoc,
   deleteDoc,
@@ -19,7 +18,7 @@ import {
   Unsubscribe,
   serverTimestamp,
 } from 'firebase/firestore';
-import { auth, db, isFirebaseInitialized } from '@/config/firebase';
+import { db, isFirebaseInitialized } from '@/config/firebase';
 import {
   Collaborator,
   CollaboratorRole,

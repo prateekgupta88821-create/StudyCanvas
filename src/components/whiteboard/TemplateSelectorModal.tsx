@@ -2,16 +2,7 @@ import React, { useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
-import { WhiteboardTemplate, CanvasElement } from '@/types/whiteboard';
-import { 
-  Sparkles, 
-  BookOpen, 
-  Cpu, 
-  FlaskConical, 
-  Binary, 
-  LayoutTemplate, 
-  CheckCircle2 
-} from 'lucide-react';
+import { WhiteboardTemplate } from '@/types/whiteboard';
 
 const ACADEMIC_TEMPLATES: WhiteboardTemplate[] = [
   // 1. Mathematics

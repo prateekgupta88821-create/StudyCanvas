@@ -275,7 +275,7 @@ class AiAssistantService {
       return res.data;
     }
     return {
-      latex: res.rawText?.replace(/[\$\`]/g, '').trim() || content,
+      latex: res.rawText?.replace(/[$`]/g, '').trim() || content,
     };
   }
 }

@@ -14,6 +14,19 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'studycanvas_theme_preference';
 
+function applyThemeClass(active: 'dark' | 'light') {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  root.setAttribute('data-theme', active);
+  if (active === 'light') {
+    root.classList.add('light');
+    root.classList.remove('dark');
+  } else {
+    root.classList.add('dark');
+    root.classList.remove('light');
+  }
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(() => {
     try {
@@ -27,52 +40,30 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return 'dark'; // Default: sophisticated dark mode
   });
 
-  const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() => {
+  const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window === 'undefined') return 'dark';
     try {
-      const saved = localStorage.getItem('studycanvas_theme_mode');
-      if (saved === 'light') return 'light';
-      if (saved === 'dark') return 'dark';
-      if (saved === 'system') {
-        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      }
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     } catch {
-      // Fallback
+      return 'dark';
     }
-    return 'dark';
   });
 
-  // Resolve theme based on preference and system OS settings
+  const resolvedTheme: 'dark' | 'light' = theme === 'system' ? systemTheme : theme;
+
   useEffect(() => {
-    if (theme === 'system') {
-      const mql = window.matchMedia('(prefers-color-scheme: dark)');
-      const handleSystemChange = () => {
-        const next = mql.matches ? 'dark' : 'light';
-        setResolvedTheme(next);
-        applyThemeClass(next);
-      };
+    applyThemeClass(resolvedTheme);
+  }, [resolvedTheme]);
 
-      mql.addEventListener('change', handleSystemChange);
-      handleSystemChange();
-
-      return () => mql.removeEventListener('change', handleSystemChange);
-    } else {
-      setResolvedTheme(theme);
-      applyThemeClass(theme);
-    }
+  useEffect(() => {
+    if (theme !== 'system' || typeof window === 'undefined') return;
+    const mql = window.matchMedia('(prefers-color-scheme: dark)');
+    const listener = (e: MediaQueryListEvent) => {
+      setSystemTheme(e.matches ? 'dark' : 'light');
+    };
+    mql.addEventListener('change', listener);
+    return () => mql.removeEventListener('change', listener);
   }, [theme]);
-
-  const applyThemeClass = (active: 'dark' | 'light') => {
-    const root = document.documentElement;
-    root.setAttribute('data-theme', active);
-    if (active === 'light') {
-      root.classList.add('light');
-      root.classList.remove('dark');
-    } else {
-      root.classList.add('dark');
-      root.classList.remove('light');
-    }
-  };
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

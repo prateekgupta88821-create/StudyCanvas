@@ -27,7 +27,7 @@ export const FunctionGraphModal: React.FC<{ isOpen: boolean; onClose: () => void
   const [xMax, setXMax] = useState(6.28);
   const [yMin, setYMin] = useState(-2);
   const [yMax, setYMax] = useState(2);
-  const [plotColor, setPlotColor] = useState('#a3e635');
+  const [plotColor] = useState(strokeColor || '#a3e635');
 
   const handleInsertGraph = () => {
     const centerX = (window.innerWidth / 2 - stagePos.x) / scale - 180;

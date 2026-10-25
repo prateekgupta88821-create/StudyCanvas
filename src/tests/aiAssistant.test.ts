@@ -5,7 +5,6 @@ import {
   FlashcardItem,
   QuizQuestion,
   DiagramFlowchart,
-  DiagramMindmap,
   LayoutCoordinateUpdate,
 } from '@/services/aiAssistantService';
 import { processAiRequest, AiAssistantRequest } from '../../api/ai-assistant';
@@ -220,7 +219,7 @@ describe('AI Learning Assistant Client Service', () => {
     try {
       await aiAssistantService.explain('Test topic');
     } catch (err: any) {
-      // Checked via first expect
+      expect(err).toBeInstanceOf(AiAssistantError);
     }
   });
 

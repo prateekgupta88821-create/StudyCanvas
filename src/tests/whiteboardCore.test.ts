@@ -10,7 +10,6 @@ import {
   TableElement,
   FlowchartNodeElement,
   MindmapNodeElement,
-  FormulaElement,
   Page,
   WhiteboardProject
 } from '@/types/whiteboard';

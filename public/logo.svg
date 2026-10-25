@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="sc-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="#0f172a"/>
+  <rect x="2" y="2" width="44" height="44" rx="10" stroke="url(#sc-grad)" stroke-width="2"/>
+  <!-- Graduation cap & chalkboard path -->
+  <path d="M12 20L24 14L36 20L24 26L12 20Z" fill="url(#sc-grad)"/>
+  <path d="M18 23.5V29C18 31.5 20.5 33.5 24 33.5C27.5 33.5 30 31.5 30 29V23.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="36" cy="24" r="2" fill="#38bdf8"/>
+  <path d="M36 24V31" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

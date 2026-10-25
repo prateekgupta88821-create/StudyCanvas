@@ -1,0 +1,118 @@
+import { WhiteboardTemplate } from '@/types/whiteboard';
+
+export const EDUCATIONAL_TEMPLATES: WhiteboardTemplate[] = [
+  {
+    id: 'blank',
+    name: 'Blank Canvas',
+    description: 'Minimalist infinite canvas for open sketching, ideation, and explanations.',
+    subject: 'General',
+    icon: 'Square',
+    gridType: 'blank',
+    recommendedFor: ['teacher', 'professor', 'student'],
+  },
+  {
+    id: 'math-grid',
+    name: 'Math & Coordinate Grid',
+    description: 'Precision Cartesian grid background ideal for geometry, graphs, and calculus.',
+    subject: 'Mathematics',
+    icon: 'Grid3X3',
+    gridType: 'grid',
+    recommendedFor: ['teacher', 'professor', 'student'],
+  },
+  {
+    id: 'cornell-notes',
+    name: 'Cornell Note System',
+    description: 'Structured layout with cue column, notes area, and lecture summary block.',
+    subject: 'Study & Review',
+    icon: 'FileText',
+    gridType: 'ruled',
+    recommendedFor: ['student', 'teacher'],
+  },
+  {
+    id: 'physics-diagram',
+    name: 'Physics & Vectors',
+    description: 'Dot-grid with alignment guides for free-body diagrams, optics, and kinematics.',
+    subject: 'Physics',
+    icon: 'Compass',
+    gridType: 'dots',
+    recommendedFor: ['professor', 'teacher'],
+  },
+  {
+    id: 'chemistry-hex',
+    name: 'Chemistry Molecular Grid',
+    description: 'Isometric dot pattern engineered for drawing organic structures and chemical bonds.',
+    subject: 'Chemistry',
+    icon: 'Atom',
+    gridType: 'isometric',
+    recommendedFor: ['professor', 'student'],
+  },
+  {
+    id: 'lecture-slides',
+    name: 'Lecture Presentation Deck',
+    description: '16:9 multi-slide deck with dark presentation aesthetics and lecture navigation.',
+    subject: 'Lectures',
+    icon: 'Presentation',
+    gridType: 'dots',
+    recommendedFor: ['professor', 'teacher'],
+  },
+  {
+    id: 'music-stave',
+    name: 'Music Theory Staves',
+    description: 'Evenly spaced horizontal lines for musical notation, chords, and ear training.',
+    subject: 'Music & Arts',
+    icon: 'Music',
+    gridType: 'lines',
+    recommendedFor: ['teacher', 'student'],
+  },
+];
+
+export const FORMULA_PRESETS = [
+  {
+    category: 'Calculus',
+    title: 'Derivative Definition',
+    latex: '\\frac{d}{dx}f(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}',
+    display: "d/dx [f(x)] = lim_{h→0} (f(x+h) - f(x)) / h",
+  },
+  {
+    category: 'Calculus',
+    title: 'Fundamental Theorem of Calculus',
+    latex: '\\int_a^b f(x)\\,dx = F(b) - F(a)',
+    display: "∫[a to b] f(x) dx = F(b) - F(a)",
+  },
+  {
+    category: 'Algebra',
+    title: 'Quadratic Formula',
+    latex: 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}',
+    display: "x = (-b ± √(b² - 4ac)) / (2a)",
+  },
+  {
+    category: 'Algebra',
+    title: 'Pythagorean Theorem',
+    latex: 'a^2 + b^2 = c^2',
+    display: "a² + b² = c²",
+  },
+  {
+    category: 'Physics',
+    title: "Newton's Second Law",
+    latex: '\\mathbf{F} = m\\mathbf{a} = \\frac{d\\mathbf{p}}{dt}',
+    display: "F = m · a = dp/dt",
+  },
+  {
+    category: 'Physics',
+    title: 'Mass-Energy Equivalence',
+    latex: 'E = mc^2',
+    display: "E = mc²",
+  },
+  {
+    category: 'Physics',
+    title: "Ohm's Law & Power",
+    latex: 'V = I \\cdot R \\quad \\implies \\quad P = V \\cdot I',
+    display: "V = I · R  (P = V · I)",
+  },
+  {
+    category: 'Trigonometry',
+    title: "Euler's Identity",
+    latex: 'e^{i\\pi} + 1 = 0',
+    display: "e^(i·π) + 1 = 0",
+  },
+];

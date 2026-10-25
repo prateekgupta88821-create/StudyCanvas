@@ -19,19 +19,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenCanvas,
   onOpenDashboard,
 }) => {
-  const { user, signInWithGoogle } = useAuth();
+  const { user } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  const handleContinueWithGoogle = async () => {
+  const handleGetStarted = () => {
     if (user) {
       onOpenDashboard();
-      return;
-    }
-    try {
-      await signInWithGoogle();
-      onOpenDashboard();
-    } catch {
-      // If error or cancelled, show AuthModal with role selector and status
+    } else {
       setIsAuthModalOpen(true);
     }
   };
@@ -54,7 +48,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Hero Section */}
       <HeroSection
-        onContinueWithGoogle={handleContinueWithGoogle}
+        onGetStarted={handleGetStarted}
         onOpenCanvas={handleOpenCanvas}
       />
 
@@ -79,7 +73,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Pre-footer Call-To-Action Banner */}
       <CTASection
-        onContinueWithGoogle={handleContinueWithGoogle}
+        onGetStarted={handleGetStarted}
         onOpenCanvas={handleOpenCanvas}
       />
 

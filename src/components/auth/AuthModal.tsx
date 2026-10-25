@@ -2,194 +2,341 @@ import React, { useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
-import { isFirebaseInitialized } from '@/config/firebase';
-import { GraduationCap, ShieldCheck, HardDrive, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { 
+  GraduationCap, 
+  Mail, 
+  Lock, 
+  User, 
+  UserCircle2, 
+  ArrowRight, 
+  CheckCircle2, 
+  AlertCircle, 
+  Sparkles,
+  LogOut 
+} from 'lucide-react';
 import { EducatorRole } from '@/types/auth';
 
-export const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void; onSuccess?: () => void }> = ({
+export interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
 }) => {
-  const { user, signInWithGoogle, updateRole, loading, authErrorInfo, clearError } = useAuth();
-  const [selectedRole, setSelectedRole] = useState<EducatorRole>(user?.role || 'teacher');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { 
+    user, 
+    signInWithEmail, 
+    signUpWithEmail, 
+    signInAsGuest, 
+    signOut,
+    loading, 
+    authErrorInfo, 
+    clearError 
+  } = useAuth();
 
-  const handleSignIn = async () => {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [selectedRole, setSelectedRole] = useState<EducatorRole>('teacher');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localValidation, setLocalValidation] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setEmail('');
+    setPassword('');
+    setDisplayName('');
+    setLocalValidation(null);
     clearError();
+  };
+
+  const handleTabSwitch = (newMode: 'signin' | 'signup') => {
+    setMode(newMode);
+    setLocalValidation(null);
+    clearError();
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalValidation(null);
+    clearError();
+
+    if (!email.trim() || !email.includes('@')) {
+      setLocalValidation('Please enter a valid email address.');
+      return;
+    }
+
+    if (!password || password.length < 6) {
+      setLocalValidation('Password must be at least 6 characters.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await signInWithGoogle();
-      if (selectedRole) {
-        await updateRole(selectedRole);
+      if (mode === 'signup') {
+        await signUpWithEmail(email, password, displayName, selectedRole);
+      } else {
+        await signInWithEmail(email, password);
       }
+      resetForm();
       onClose();
       if (onSuccess) {
         onSuccess();
       }
     } catch {
-      // Error is caught, formatted, and exposed via AuthContext and Toast
+      // Handled via context & authErrorInfo
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleGuestSignIn = async () => {
+    setLocalValidation(null);
+    clearError();
+    setIsSubmitting(true);
+    try {
+      await signInAsGuest('Guest Educator', selectedRole);
+      resetForm();
+      onClose();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch {
+      // Handled via context
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    resetForm();
   };
 
   return (
     <Dialog
       isOpen={isOpen}
       onClose={onClose}
-      title="StudyCanvas Account & Google Drive Sync"
-      description="Connect your verified Google Account to save whiteboard lessons, sync real-time metadata, and access your lecture notes anywhere."
+      title={user ? 'StudyCanvas Profile' : mode === 'signin' ? 'Sign In to StudyCanvas' : 'Create StudyCanvas Account'}
+      description={
+        user 
+          ? `Manage your active session and educator profile.`
+          : mode === 'signin'
+            ? 'Access your saved whiteboards, lecture notes, and classroom boards.'
+            : 'Join educators and students creating interactive derivations and lecture notes.'
+      }
+      maxWidth="max-w-md"
     >
-      <div className="space-y-6 pt-2">
-        {/* Role selector */}
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">
-            Select Your Educator / Student Profile
-          </label>
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                { id: 'teacher', label: 'School Teacher', desc: 'K-12 Classes' },
-                { id: 'professor', label: 'College Prof', desc: 'Higher Ed' },
-                { id: 'student', label: 'Student / Scholar', desc: 'Study & Review' },
-              ] as const
-            ).map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setSelectedRole(r.id)}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
-                  selectedRole === r.id
-                    ? 'border-lime-400 bg-lime-400/10 text-white ring-1 ring-lime-400'
-                    : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                }`}
-              >
-                <GraduationCap className={`h-5 w-5 mb-1 ${selectedRole === r.id ? 'text-lime-400' : 'text-slate-500'}`} />
-                <span className="text-xs font-semibold">{r.label}</span>
-                <span className="text-[10px] text-slate-500 mt-0.5">{r.desc}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Benefits list */}
-        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 rounded-lg bg-lime-400/10 p-1.5 text-lime-400 border border-lime-400/20">
-              <HardDrive className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-slate-200">Google Drive Native File Storage</p>
-              <p className="text-[11px] text-slate-400">
-                Your whiteboards are stored as <code className="text-lime-400 font-mono">.studycanvas</code> files directly in your Google Drive without third-party vendor lock-in.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 rounded-lg bg-emerald-500/10 p-1.5 text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-slate-200">Cloud Firestore Realtime Metadata</p>
-              <p className="text-[11px] text-slate-400">
-                Synchronize title, subjects, timestamps, and page counts across all your browser tabs.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {authErrorInfo && (
-          <div className="rounded-xl bg-red-500/10 border border-red-500/25 p-3.5 space-y-2 text-xs text-red-300">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-red-200">{authErrorInfo.code}</p>
-                <p className="text-[11px] text-red-300/90 leading-relaxed mt-0.5">
-                  {authErrorInfo.message}
-                </p>
-              </div>
-            </div>
-            {authErrorInfo.isRetryable && (
-              <div className="pt-1 flex justify-end">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSignIn}
-                  disabled={loading || isSubmitting}
-                  className="text-xs border-red-500/30 text-red-300 hover:bg-red-500/20 gap-1.5 h-7"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  <span>Retry Sign In</span>
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {!isFirebaseInitialized && (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-300">
-            <strong>Configuration Notice:</strong> Firebase credentials are currently unconfigured in <code className="text-amber-200 font-mono">.env.local</code>. Real Google authentication requires adding your Firebase project credentials.
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div className="flex flex-col gap-2 pt-2">
-          {user ? (
-            <div className="flex items-center justify-between rounded-xl border border-lime-400/30 bg-lime-400/10 p-3">
-              <div className="flex items-center gap-2.5">
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || 'User'}
-                    className="h-8 w-8 rounded-full object-cover ring-1 ring-lime-400/50"
-                  />
-                ) : (
-                  <CheckCircle2 className="h-5 w-5 text-lime-400" />
-                )}
-                <div>
-                  <p className="text-xs font-semibold text-white">Signed in as {user.displayName}</p>
-                  <p className="text-[11px] text-lime-300/80">{user.email}</p>
+      <div className="space-y-5 pt-1 text-slate-100">
+        {user ? (
+          // Active User Session Card
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-lime-400/10 border border-lime-400/20 flex items-center justify-center text-lime-400 font-bold text-sm">
+                  {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-white truncate">{user.displayName || 'StudyCanvas User'}</p>
+                    {user.isGuest && (
+                      <span className="text-[10px] font-semibold uppercase bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        Guest Mode
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">{user.email || 'Temporary local session'}</p>
                 </div>
               </div>
-              <Button size="sm" variant="outline" onClick={onClose}>
-                Done
+
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span className="capitalize">Role: <strong className="text-white">{user.role}</strong></span>
+                <span className="text-[11px] text-lime-400 flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Ready
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="w-full text-xs text-rose-300 border-rose-500/30 hover:bg-rose-500/10 gap-1.5"
+                onClick={handleSignOut}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Sign Out</span>
+              </Button>
+              <Button
+                variant="lime"
+                className="w-full text-xs font-semibold"
+                onClick={() => {
+                  onClose();
+                  if (onSuccess) onSuccess();
+                }}
+              >
+                <span>Continue</span>
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
               </Button>
             </div>
-          ) : (
-            <Button
-              variant="lime"
-              size="lg"
-              className="w-full text-sm font-semibold h-11"
-              onClick={handleSignIn}
-              isLoading={loading || isSubmitting}
-            >
-              <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                <path
-                  fill="#000000"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#000000"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#000000"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#000000"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-              <span>Continue with Google</span>
-            </Button>
-          )}
+          </div>
+        ) : (
+          <>
+            {/* Mode Toggle Tabs */}
+            <div className="flex rounded-xl bg-slate-900/80 p-1 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleTabSwitch('signin')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  mode === 'signin'
+                    ? 'bg-lime-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTabSwitch('signup')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  mode === 'signup'
+                    ? 'bg-lime-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
 
-          <Button variant="ghost" size="sm" onClick={onClose} className="text-slate-400">
-            Cancel
-          </Button>
-        </div>
+            {/* Role selector (in Signup mode) */}
+            {mode === 'signup' && (
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1.5">
+                  Select Your Primary Role
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { id: 'teacher', label: 'Teacher', desc: 'K-12 Classes' },
+                      { id: 'professor', label: 'Professor', desc: 'Higher Ed' },
+                      { id: 'student', label: 'Student', desc: 'Study & Review' },
+                    ] as const
+                  ).map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setSelectedRole(r.id)}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
+                        selectedRole === r.id
+                          ? 'border-lime-400 bg-lime-400/10 text-white ring-1 ring-lime-400'
+                          : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                      }`}
+                    >
+                      <GraduationCap className={`h-4 w-4 mb-1 ${selectedRole === r.id ? 'text-lime-400' : 'text-slate-500'}`} />
+                      <span className="text-xs font-semibold">{r.label}</span>
+                      <span className="text-[9px] text-slate-500">{r.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Email / Password Form */}
+            <form onSubmit={handleEmailAuth} className="space-y-3.5">
+              {mode === 'signup' && (
+                <div>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">Full Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="e.g. Professor Marie Curie"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-lime-400"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-medium text-slate-300 block mb-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@school.edu"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-lime-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-300 block mb-1">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-lime-400"
+                  />
+                </div>
+              </div>
+
+              {(localValidation || authErrorInfo) && (
+                <div className="rounded-xl bg-rose-500/10 border border-rose-500/25 p-3 text-xs text-rose-300 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>{localValidation || authErrorInfo?.message}</span>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                variant="lime"
+                size="lg"
+                className="w-full text-xs font-bold h-10 mt-1"
+                isLoading={loading || isSubmitting}
+              >
+                <span>{mode === 'signin' ? 'Sign In' : 'Create Free Account'}</span>
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </form>
+
+            {/* Guest Mode Divider & Quick Access */}
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-800" />
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase font-semibold">
+                <span className="bg-[#090b0e] px-2 text-slate-500 tracking-wider">Or continue without account</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleGuestSignIn}
+              disabled={loading || isSubmitting}
+              className="w-full text-xs font-semibold h-10 border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-200 hover:text-white gap-2"
+            >
+              <UserCircle2 className="h-4 w-4 text-lime-400" />
+              <span>Continue as Guest</span>
+              <span className="text-[10px] text-slate-400 ml-auto font-normal flex items-center gap-1">
+                <Sparkles className="h-3 w-3 text-lime-400" /> Instant Access
+              </span>
+            </Button>
+          </>
+        )}
       </div>
     </Dialog>
   );

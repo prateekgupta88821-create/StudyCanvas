@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { authService, formatAuthError, type AuthErrorInfo } from '@/services/authService';
 import { googleIdentityService } from '@/services/googleIdentityService';
@@ -10,7 +10,14 @@ import { AuthContext } from './AuthContextDef';
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { success, error: toastError, info } = useToast();
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('studycanvas_user_profile');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
     return googleIdentityService.getValidToken() || authService.getStoredDriveToken();
   });
@@ -18,9 +25,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(Boolean(isFirebaseInitialized));
   const [error, setError] = useState<string | null>(null);
   const [authErrorInfo, setAuthErrorInfo] = useState<AuthErrorInfo | null>(null);
-
-  // Use a ref for retry callback to avoid accessing variable during initialization
-  const signInWithGoogleRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (!isFirebaseInitialized) {
@@ -42,6 +46,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setAuthErrorInfo(errInfo);
           }
         } else {
+          // Check if local guest session exists
+          const saved = localStorage.getItem('studycanvas_user_profile');
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              if (parsed?.isGuest) {
+                setUser(parsed);
+                setLoading(false);
+                return;
+              }
+            } catch {
+              // Ignore
+            }
+          }
           // User is signed out or session expired
           setUser(null);
           setDriveAccessToken(null);
@@ -69,69 +87,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthErrorInfo(null);
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
     clearError();
     setLoading(true);
 
     try {
-      const result = await authService.signInWithGoogle();
-      
-      // Update state strictly from authenticated result
+      const result = await authService.signInWithEmail(email, password);
       setUser(result.user);
       setFirebaseUser(result.firebaseUser);
-      setDriveAccessToken(result.driveAccessToken);
       localStorage.setItem('studycanvas_user_profile', JSON.stringify(result.user));
 
-      // Display polished toast notification ONLY after true successful sign-in
-      success('Successfully signed in. Welcome to StudyCanvas!', 'Welcome Back');
+      success(`Successfully signed in. Welcome back!`, 'Welcome');
     } catch (err: unknown) {
       const errInfo = formatAuthError(err);
-      console.warn('Google Sign-in failed:', errInfo);
       setError(errInfo.message);
       setAuthErrorInfo(errInfo);
-
-      if (errInfo.isCancelled) {
-        info('Sign-in cancelled. You can try again whenever you are ready.', 'Sign In');
-      } else if (errInfo.isPopupBlocked) {
-        toastError(
-          'Sign-in window blocked by your browser. Please enable popups for StudyCanvas and retry.',
-          'Popup Blocked',
-          {
-            label: 'Retry Sign In',
-            onClick: () => {
-              void signInWithGoogleRef.current?.();
-            },
-          }
-        );
-      } else if (errInfo.isConfigMissing) {
-        toastError(
-          'Firebase Authentication keys not found in .env.local. Add VITE_FIREBASE_* variables to enable Google login.',
-          'Configuration Required'
-        );
-      } else {
-        toastError(
-          errInfo.message,
-          'Authentication Failed',
-          errInfo.isRetryable
-            ? {
-                label: 'Try Again',
-                onClick: () => {
-                  void signInWithGoogleRef.current?.();
-                },
-              }
-            : undefined
-        );
-      }
+      toastError(errInfo.message, 'Authentication Failed');
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [clearError, success, toastError, info]);
+  }, [clearError, success, toastError]);
 
-  // Keep ref synchronized
-  useEffect(() => {
-    signInWithGoogleRef.current = signInWithGoogle;
-  }, [signInWithGoogle]);
+  const signUpWithEmail = useCallback(async (
+    email: string, 
+    password: string, 
+    displayName?: string, 
+    role?: EducatorRole
+  ) => {
+    clearError();
+    setLoading(true);
+
+    try {
+      const result = await authService.signUpWithEmail(email, password, displayName, role);
+      setUser(result.user);
+      setFirebaseUser(result.firebaseUser);
+      localStorage.setItem('studycanvas_user_profile', JSON.stringify(result.user));
+
+      success('Account created successfully. Welcome to StudyCanvas!', 'Account Created');
+    } catch (err: unknown) {
+      const errInfo = formatAuthError(err);
+      setError(errInfo.message);
+      setAuthErrorInfo(errInfo);
+      toastError(errInfo.message, 'Registration Failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [clearError, success, toastError]);
+
+  const signInAsGuest = useCallback(async (displayName?: string, role?: EducatorRole) => {
+    clearError();
+    setLoading(true);
+
+    try {
+      const result = await authService.signInAsGuest(displayName, role);
+      setUser(result.user);
+      setFirebaseUser(result.firebaseUser);
+      localStorage.setItem('studycanvas_user_profile', JSON.stringify(result.user));
+
+      success('Continuing as Guest. All whiteboard tools are active!', 'Guest Mode Active');
+    } catch (err: unknown) {
+      const errInfo = formatAuthError(err);
+      setError(errInfo.message);
+      setAuthErrorInfo(errInfo);
+      toastError(errInfo.message, 'Guest Sign-In Failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [clearError, success, toastError]);
 
   const signOut = useCallback(async () => {
     try {
@@ -160,7 +185,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDriveAccessToken(token);
         return token;
       }
-      // If GIS client ID is not yet configured, check stored token
       const stored = googleIdentityService.getValidToken() || authService.getStoredDriveToken();
       if (stored) {
         setDriveAccessToken(stored);
@@ -181,7 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
 
-    if (isFirebaseInitialized && user?.uid) {
+    if (isFirebaseInitialized && user?.uid && !user.isGuest) {
       await authService.updateUserRole(user.uid, role);
     }
   }, [user]);
@@ -194,8 +218,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       error,
       authErrorInfo,
       isFirebaseConfigured: Boolean(isFirebaseInitialized),
+      isGuest: Boolean(user?.isGuest),
       driveAccessToken,
-      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signInAsGuest,
       signOut,
       clearError,
       refreshDriveToken,
@@ -208,7 +235,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       error,
       authErrorInfo,
       driveAccessToken,
-      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signInAsGuest,
       signOut,
       clearError,
       refreshDriveToken,

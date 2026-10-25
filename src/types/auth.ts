@@ -6,6 +6,7 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   role: EducatorRole;
+  isGuest?: boolean;
   institution?: string;
   subjectSpecialty?: string;
   createdAt: number;
@@ -18,8 +19,11 @@ export interface AuthContextType {
   error: string | null;
   authErrorInfo: import('@/services/authService').AuthErrorInfo | null;
   isFirebaseConfigured: boolean;
+  isGuest: boolean;
   driveAccessToken: string | null;
-  signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, displayName?: string, role?: EducatorRole) => Promise<void>;
+  signInAsGuest: (displayName?: string, role?: EducatorRole) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
   refreshDriveToken: () => Promise<string | null>;

@@ -65,8 +65,8 @@ describe('StudyCanvas End-to-End QA User Journey & Technical Validation', () => 
       expect(toastNotification).toBeNull();
       expect(isAuthenticated).toBe(false);
 
-      // Simulate successful Google OAuth response
-      const mockGoogleUser = {
+      // Simulate successful authentication response
+      const mockAuthUser = {
         uid: 'prof_e2e_456',
         displayName: 'Dr. Katherine Johnson',
         email: 'kjohnson@nasa.gov',
@@ -74,7 +74,7 @@ describe('StudyCanvas End-to-End QA User Journey & Technical Validation', () => 
         role: 'professor',
       };
 
-      onAuthSuccess(mockGoogleUser);
+      onAuthSuccess(mockAuthUser);
 
       // Confirm toast appears only after successful auth with exact copy
       expect(isAuthenticated).toBe(true);

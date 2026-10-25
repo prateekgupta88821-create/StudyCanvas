@@ -3,12 +3,12 @@ import { Button } from '@/components/ui/Button';
 import { ArrowRight, HardDrive, Sparkles } from 'lucide-react';
 
 export interface CTASectionProps {
-  onContinueWithGoogle: () => void;
+  onGetStarted: () => void;
   onOpenCanvas: () => void;
 }
 
 export const CTASection: React.FC<CTASectionProps> = ({
-  onContinueWithGoogle,
+  onGetStarted,
   onOpenCanvas,
 }) => {
   return (
@@ -33,7 +33,7 @@ export const CTASection: React.FC<CTASectionProps> = ({
 
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
               Join professors, teachers, and ambitious students creating clearer derivations and smarter lecture notes. 
-              Open an interactive session now or sync with Google Drive.
+              Open an interactive session now or create a free account.
             </p>
 
             {/* CTAs */}
@@ -41,10 +41,10 @@ export const CTASection: React.FC<CTASectionProps> = ({
               <Button
                 variant="lime"
                 size="lg"
-                onClick={onContinueWithGoogle}
+                onClick={onGetStarted}
                 className="w-full sm:w-auto text-sm font-semibold h-12 px-7 gap-2 shadow-lg shadow-lime-400/20"
               >
-                <span>Continue with Google</span>
+                <span>Get Started Free</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
 

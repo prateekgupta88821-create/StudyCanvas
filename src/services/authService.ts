@@ -1,15 +1,18 @@
 import { 
-  signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  signInAnonymously,
   signOut as fbSignOut, 
-  GoogleAuthProvider, 
   onAuthStateChanged,
   type User as FirebaseUser 
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db, googleProvider, isFirebaseInitialized } from '@/config/firebase';
+import { auth, db, isFirebaseInitialized } from '@/config/firebase';
 import { UserProfile, EducatorRole } from '@/types/auth';
 
 const TOKEN_STORAGE_KEY = 'studycanvas_drive_token';
+const GUEST_STORAGE_KEY = 'studycanvas_guest_session';
 
 export interface AuthErrorInfo {
   code: string;
@@ -40,31 +43,62 @@ export function formatAuthError(error: unknown): AuthErrorInfo {
   const rawMessage = err.message || '';
 
   switch (code) {
-    case 'auth/popup-closed-by-user':
+    case 'auth/email-already-in-use':
       return {
         code,
-        message: 'Sign-in cancelled. The Google sign-in window was closed before completing.',
-        isCancelled: true,
+        message: 'This email is already registered. Please sign in instead.',
+        isCancelled: false,
+        isPopupBlocked: false,
+        isConfigMissing: false,
+        isRetryable: false,
+      };
+
+    case 'auth/invalid-email':
+      return {
+        code,
+        message: 'The email address is invalid. Please check the spelling and try again.',
+        isCancelled: false,
         isPopupBlocked: false,
         isConfigMissing: false,
         isRetryable: true,
       };
 
-    case 'auth/popup-blocked':
+    case 'auth/weak-password':
       return {
         code,
-        message: 'Sign-in popup was blocked by your browser. Please allow popups for StudyCanvas and try again.',
+        message: 'Password is too weak. Please use at least 6 characters.',
         isCancelled: false,
-        isPopupBlocked: true,
+        isPopupBlocked: false,
         isConfigMissing: false,
         isRetryable: true,
       };
 
-    case 'auth/cancelled-popup-request':
+    case 'auth/user-not-found':
       return {
         code,
-        message: 'A previous sign-in request was interrupted. Please click Continue with Google again.',
-        isCancelled: true,
+        message: 'No account found with this email. Please check your email or create a new account.',
+        isCancelled: false,
+        isPopupBlocked: false,
+        isConfigMissing: false,
+        isRetryable: false,
+      };
+
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return {
+        code,
+        message: 'Invalid email or password. Please verify your credentials and try again.',
+        isCancelled: false,
+        isPopupBlocked: false,
+        isConfigMissing: false,
+        isRetryable: true,
+      };
+
+    case 'auth/too-many-requests':
+      return {
+        code,
+        message: 'Too many unsuccessful attempts. Access is temporarily paused for security. Please try again in a few minutes.',
+        isCancelled: false,
         isPopupBlocked: false,
         isConfigMissing: false,
         isRetryable: true,
@@ -80,36 +114,6 @@ export function formatAuthError(error: unknown): AuthErrorInfo {
         isRetryable: true,
       };
 
-    case 'auth/unauthorized-domain':
-      return {
-        code,
-        message: 'This domain is not authorized for Google Sign-In. Add this domain to your Firebase Console under Authentication > Settings > Authorized Domains.',
-        isCancelled: false,
-        isPopupBlocked: false,
-        isConfigMissing: true,
-        isRetryable: false,
-      };
-
-    case 'auth/operation-not-allowed':
-      return {
-        code,
-        message: 'Google Sign-In is not enabled. Please enable the Google provider in Firebase Console under Authentication > Sign-in method.',
-        isCancelled: false,
-        isPopupBlocked: false,
-        isConfigMissing: true,
-        isRetryable: false,
-      };
-
-    case 'auth/account-exists-with-different-credential':
-      return {
-        code,
-        message: 'An account already exists with the same email using a different sign-in method.',
-        isCancelled: false,
-        isPopupBlocked: false,
-        isConfigMissing: false,
-        isRetryable: false,
-      };
-
     case 'auth/user-disabled':
       return {
         code,
@@ -123,7 +127,7 @@ export function formatAuthError(error: unknown): AuthErrorInfo {
     case 'auth/missing-configuration':
       return {
         code,
-        message: 'Firebase configuration is missing. Add your VITE_FIREBASE_* keys to .env.local to enable real Google authentication.',
+        message: 'Firebase configuration is missing. Add your VITE_FIREBASE_* keys to .env.local to enable cloud accounts, or continue as a guest.',
         isCancelled: false,
         isPopupBlocked: false,
         isConfigMissing: true,
@@ -143,7 +147,7 @@ export function formatAuthError(error: unknown): AuthErrorInfo {
       }
       return {
         code,
-        message: rawMessage || 'Failed to authenticate with Google. Please try again.',
+        message: rawMessage || 'Failed to authenticate. Please check your credentials and try again.',
         isCancelled: false,
         isPopupBlocked: false,
         isConfigMissing: false,
@@ -161,28 +165,91 @@ export const authService = {
   },
 
   /**
-   * Signs in with Google using Firebase Auth popup, requesting Google Drive scope
+   * Signs in with email and password
    */
-  async signInWithGoogle(): Promise<{ user: UserProfile; driveAccessToken: string | null; firebaseUser: FirebaseUser }> {
+  async signInWithEmail(email: string, password: string): Promise<{ user: UserProfile; firebaseUser: FirebaseUser }> {
     if (!this.isConfigured() || !auth) {
       const err = new Error('Firebase credentials are not configured. Please add VITE_FIREBASE_* variables to .env.local.');
       (err as any).code = 'auth/missing-configuration';
       throw err;
     }
 
-    const result = await signInWithPopup(auth, googleProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const driveAccessToken = credential?.accessToken || null;
+    const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const fbUser = credential.user;
+    const userProfile = await this.syncUserProfile(fbUser);
+    localStorage.removeItem(GUEST_STORAGE_KEY);
 
-    if (driveAccessToken) {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, driveAccessToken);
+    return { user: userProfile, firebaseUser: fbUser };
+  },
+
+  /**
+   * Registers a new account with email and password
+   */
+  async signUpWithEmail(
+    email: string, 
+    password: string, 
+    displayName?: string, 
+    role: EducatorRole = 'teacher'
+  ): Promise<{ user: UserProfile; firebaseUser: FirebaseUser }> {
+    if (!this.isConfigured() || !auth) {
+      const err = new Error('Firebase credentials are not configured. Please add VITE_FIREBASE_* variables to .env.local.');
+      (err as any).code = 'auth/missing-configuration';
+      throw err;
     }
 
-    const fbUser = result.user;
-    // Derive profile strictly from verified Firebase user token
-    const userProfile = await this.syncUserProfile(fbUser);
+    const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const fbUser = credential.user;
 
-    return { user: userProfile, driveAccessToken, firebaseUser: fbUser };
+    const formattedName = displayName?.trim() || email.split('@')[0] || 'StudyCanvas Educator';
+    try {
+      await updateProfile(fbUser, { displayName: formattedName });
+    } catch {
+      // Profile update non-fatal
+    }
+
+    const userProfile = await this.syncUserProfile(fbUser, role);
+    userProfile.displayName = formattedName;
+    localStorage.removeItem(GUEST_STORAGE_KEY);
+
+    return { user: userProfile, firebaseUser: fbUser };
+  },
+
+  /**
+   * Signs in as a guest (via Firebase Anonymous Auth if available, or local guest session)
+   */
+  async signInAsGuest(
+    displayName = 'Guest Educator', 
+    role: EducatorRole = 'teacher'
+  ): Promise<{ user: UserProfile; firebaseUser: FirebaseUser | null }> {
+    if (this.isConfigured() && auth) {
+      try {
+        const credential = await signInAnonymously(auth);
+        const fbUser = credential.user;
+        const profile = await this.syncUserProfile(fbUser, role);
+        profile.displayName = displayName;
+        profile.isGuest = true;
+        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(profile));
+        return { user: profile, firebaseUser: fbUser };
+      } catch (err) {
+        console.warn('Firebase anonymous auth failed, falling back to local guest session:', err);
+      }
+    }
+
+    // Local in-browser guest profile (works even when Firebase is not configured or offline)
+    const localGuestProfile: UserProfile = {
+      uid: `guest_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      email: null,
+      displayName: displayName || 'Guest Educator',
+      photoURL: null,
+      role,
+      isGuest: true,
+      createdAt: Date.now(),
+    };
+
+    localStorage.setItem('studycanvas_user_profile', JSON.stringify(localGuestProfile));
+    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(localGuestProfile));
+
+    return { user: localGuestProfile, firebaseUser: null };
   },
 
   /**
@@ -190,6 +257,7 @@ export const authService = {
    */
   async signOut(): Promise<void> {
     sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(GUEST_STORAGE_KEY);
     localStorage.removeItem('studycanvas_user_profile');
     if (auth && isFirebaseInitialized) {
       await fbSignOut(auth);
@@ -214,6 +282,7 @@ export const authService = {
       displayName: fbUser.displayName || 'StudyCanvas Educator',
       photoURL: fbUser.photoURL,
       role,
+      isGuest: fbUser.isAnonymous || false,
       createdAt: Date.now(),
     };
 

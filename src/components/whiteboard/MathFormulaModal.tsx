@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
-import { useWhiteboard } from '@/contexts/WhiteboardContext';
+import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { FormulaElement } from '@/types/whiteboard';
 import { FORMULA_PRESETS } from '@/config/constants';
 import { Plus } from 'lucide-react';

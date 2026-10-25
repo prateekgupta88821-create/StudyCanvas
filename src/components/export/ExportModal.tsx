@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type Konva from 'konva';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
-import { useWhiteboard } from '@/contexts/WhiteboardContext';
+import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { exportService } from '@/services/exportService';
 import confetti from 'canvas-confetti';
 import { 

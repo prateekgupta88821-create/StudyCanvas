@@ -1,5 +1,11 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  setPersistence, 
+  browserLocalPersistence, 
+  type Auth 
+} from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { env } from './env';
 
@@ -21,11 +27,16 @@ if (env.isFirebaseConfigured) {
     app = getApps().length === 0 ? initializeApp(env.firebase) : getApps()[0];
     auth = getAuth(app);
     db = getFirestore(app);
+
+    // Explicitly persist authentication session in browser local storage
+    setPersistence(auth, browserLocalPersistence).catch((err) => {
+      console.warn('Failed to enforce browserLocalPersistence on Firebase Auth:', err);
+    });
   } catch (error) {
     console.error('Failed to initialize Firebase SDK:', error);
   }
 } else {
-  console.info('StudyCanvas: Firebase configuration not found in environment. Running in offline/demo mode with local storage persistence.');
+  console.info('StudyCanvas: Firebase configuration not found in environment.');
 }
 
 export { app, auth, db, googleProvider };

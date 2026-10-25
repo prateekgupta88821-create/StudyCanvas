@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useWhiteboard } from '@/contexts/WhiteboardContext';
+import { useWhiteboard } from '@/hooks/useWhiteboard';
 
 export function useKeyboardShortcuts() {
   const {

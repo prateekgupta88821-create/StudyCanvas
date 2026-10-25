@@ -1,34 +1,35 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { WhiteboardProject } from '@/types/whiteboard';
 import { firestoreService } from '@/services/firestoreService';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 
 export function useFirestoreProjects() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<WhiteboardProject[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [storedProjects, setStoredProjects] = useState<WhiteboardProject[]>([]);
+  const [loading, setLoading] = useState<boolean>(Boolean(user));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
-      setProjects([]);
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
     const unsubscribe = firestoreService.subscribeToUserProjects(user.uid, (list) => {
-      setProjects(list);
+      setStoredProjects(list);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [user]);
 
+  const projects = useMemo(() => {
+    return user ? storedProjects : [];
+  }, [user, storedProjects]);
+
   const deleteProject = useCallback(async (projectId: string) => {
     try {
       await firestoreService.deleteProject(projectId);
-      setProjects(prev => prev.filter(p => p.id !== projectId));
+      setStoredProjects((prev) => prev.filter((p) => p.id !== projectId));
     } catch (err: any) {
       setError(err.message || 'Failed to delete project');
       throw err;
@@ -40,7 +41,7 @@ export function useFirestoreProjects() {
     setLoading(true);
     try {
       const list = await firestoreService.getUserProjects(user.uid);
-      setProjects(list);
+      setStoredProjects(list);
     } catch (err: any) {
       setError(err.message || 'Failed to refresh projects');
     } finally {
@@ -50,7 +51,7 @@ export function useFirestoreProjects() {
 
   return {
     projects,
-    loading,
+    loading: user ? loading : false,
     error,
     deleteProject,
     refresh,

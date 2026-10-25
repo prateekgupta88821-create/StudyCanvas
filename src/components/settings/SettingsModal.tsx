@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { storage } from '@/utils/storage';
 import { UserPreferences } from '@/types/settings';
 import { EducatorRole } from '@/types/auth';

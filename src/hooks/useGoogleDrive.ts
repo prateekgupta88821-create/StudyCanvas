@@ -1,43 +1,67 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { googleDriveService } from '@/services/googleDriveService';
 import { DriveFileMetadata, DriveSyncStatus } from '@/types/drive';
 import { WhiteboardProject } from '@/types/whiteboard';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 
 export function useGoogleDrive() {
   const { driveAccessToken, refreshDriveToken } = useAuth();
-  const [driveFiles, setDriveFiles] = useState<DriveFileMetadata[]>([]);
+  const [remoteFiles, setRemoteFiles] = useState<DriveFileMetadata[]>([]);
   const [loading, setLoading] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<DriveSyncStatus>({
-    state: driveAccessToken ? 'idle' : 'disconnected',
+  const [syncStatusState, setSyncStatusState] = useState<DriveSyncStatus>({
+    state: 'idle',
     lastSyncedAt: undefined,
     error: null,
   });
 
   const loadDriveFiles = useCallback(async () => {
     if (!driveAccessToken) {
-      setDriveFiles([]);
+      setRemoteFiles([]);
       return;
     }
     setLoading(true);
     try {
       const files = await googleDriveService.listWhiteboardFiles(driveAccessToken);
-      setDriveFiles(files);
+      setRemoteFiles(files);
     } catch (err: any) {
-      setSyncStatus(prev => ({ ...prev, error: err.message }));
+      setSyncStatusState((prev) => ({ ...prev, error: err.message }));
     } finally {
       setLoading(false);
     }
   }, [driveAccessToken]);
 
   useEffect(() => {
-    if (driveAccessToken) {
-      loadDriveFiles();
-      setSyncStatus({ state: 'idle', error: null });
-    } else {
-      setSyncStatus({ state: 'disconnected', error: null });
+    if (!driveAccessToken) return;
+
+    let isCancelled = false;
+    googleDriveService.listWhiteboardFiles(driveAccessToken)
+      .then((files) => {
+        if (!isCancelled) {
+          setRemoteFiles(files);
+          setSyncStatusState({ state: 'idle', error: null });
+        }
+      })
+      .catch((err: any) => {
+        if (!isCancelled) {
+          setSyncStatusState((prev) => ({ ...prev, error: err.message }));
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [driveAccessToken]);
+
+  const driveFiles = useMemo(() => {
+    return driveAccessToken ? remoteFiles : [];
+  }, [driveAccessToken, remoteFiles]);
+
+  const syncStatus: DriveSyncStatus = useMemo(() => {
+    if (!driveAccessToken) {
+      return { state: 'disconnected', error: null };
     }
-  }, [driveAccessToken, loadDriveFiles]);
+    return syncStatusState;
+  }, [driveAccessToken, syncStatusState]);
 
   const saveToDrive = useCallback(async (project: WhiteboardProject) => {
     let token = driveAccessToken;
@@ -45,14 +69,14 @@ export function useGoogleDrive() {
       token = await refreshDriveToken();
     }
     if (!token) {
-      setSyncStatus({ state: 'error', error: 'Please grant Google Drive permissions.' });
+      setSyncStatusState({ state: 'error', error: 'Please grant Google Drive permissions.' });
       throw new Error('Google Drive access token not available');
     }
 
-    setSyncStatus({ state: 'syncing', error: null });
+    setSyncStatusState({ state: 'syncing', error: null });
     try {
       const result = await googleDriveService.uploadProjectToDrive(project, token);
-      setSyncStatus({
+      setSyncStatusState({
         state: 'synced',
         lastSyncedAt: Date.now(),
         fileId: result.fileId,
@@ -61,7 +85,7 @@ export function useGoogleDrive() {
       await loadDriveFiles();
       return result;
     } catch (err: any) {
-      setSyncStatus({ state: 'error', error: err.message });
+      setSyncStatusState({ state: 'error', error: err.message });
       throw err;
     }
   }, [driveAccessToken, refreshDriveToken, loadDriveFiles]);

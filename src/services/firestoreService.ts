@@ -10,7 +10,7 @@ import {
   orderBy, 
   onSnapshot 
 } from 'firebase/firestore';
-import { db, isFirebaseInitialized } from '@/config/firebase';
+import { auth, db, isFirebaseInitialized } from '@/config/firebase';
 import { WhiteboardProject } from '@/types/whiteboard';
 import { storage } from '@/utils/storage';
 
@@ -21,19 +21,24 @@ export const firestoreService = {
    * Saves or updates a whiteboard project in Cloud Firestore (with local storage backup)
    */
   async saveProject(project: WhiteboardProject): Promise<void> {
+    // If authenticated user is present, ensure ownerId matches the verified user
+    const currentUid = auth?.currentUser?.uid;
+    const verifiedProject: WhiteboardProject = {
+      ...project,
+      ownerId: currentUid || project.ownerId || 'guest',
+      updatedAt: Date.now(),
+    };
+
     // Always persist to local backup
-    storage.saveProject(project);
+    storage.saveProject(verifiedProject);
 
     if (!db || !isFirebaseInitialized) {
       return;
     }
 
     try {
-      const docRef = doc(db, COLLECTION_NAME, project.id);
-      await setDoc(docRef, {
-        ...project,
-        updatedAt: Date.now()
-      }, { merge: true });
+      const docRef = doc(db, COLLECTION_NAME, verifiedProject.id);
+      await setDoc(docRef, verifiedProject, { merge: true });
     } catch (error) {
       console.error('Error saving project to Firestore:', error);
       throw error;

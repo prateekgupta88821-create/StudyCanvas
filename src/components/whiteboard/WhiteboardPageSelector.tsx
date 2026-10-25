@@ -1,5 +1,5 @@
 import React from 'react';
-import { useWhiteboard } from '@/contexts/WhiteboardContext';
+import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { Plus, Trash2, Layers, Check } from 'lucide-react';

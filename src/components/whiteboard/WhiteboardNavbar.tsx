@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useWhiteboard } from '@/contexts/WhiteboardContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { useWhiteboard } from '@/hooks/useWhiteboard';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { StatusPill } from '@/components/common/StatusPill';
 import { UserMenu } from '@/components/auth/UserMenu';

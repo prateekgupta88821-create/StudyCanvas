@@ -8,7 +8,7 @@ import { PersonaBenefits } from '@/components/landing/PersonaBenefits';
 import { CTASection } from '@/components/landing/CTASection';
 import { Footer } from '@/components/landing/Footer';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface LandingPageProps {
   onOpenCanvas: () => void;
@@ -23,7 +23,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const handleContinueWithGoogle = async () => {
-    if (user && user.uid !== 'educator-demo-user') {
+    if (user) {
       onOpenDashboard();
       return;
     }
@@ -36,23 +36,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   };
 
+  const handleOpenCanvas = () => {
+    if (user) {
+      onOpenCanvas();
+    } else {
+      setIsAuthModalOpen(true);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#090b0e] text-slate-100 flex flex-col selection:bg-lime-400 selection:text-slate-950">
       {/* Top Navigation */}
       <Navbar
         onSignIn={() => setIsAuthModalOpen(true)}
-        onOpenCanvas={onOpenCanvas}
+        onOpenCanvas={handleOpenCanvas}
       />
 
       {/* Hero Section */}
       <HeroSection
         onContinueWithGoogle={handleContinueWithGoogle}
-        onOpenCanvas={onOpenCanvas}
+        onOpenCanvas={handleOpenCanvas}
       />
 
       {/* Main Interactive Product Preview */}
       <ProductPreview
-        onOpenCanvas={onOpenCanvas}
+        onOpenCanvas={handleOpenCanvas}
       />
 
       {/* Core Educational Features */}
@@ -60,24 +68,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* How It Works (Three Simple Steps) */}
       <HowItWorksSection
-        onOpenCanvas={onOpenCanvas}
+        onOpenCanvas={handleOpenCanvas}
       />
 
       {/* Segmented Persona Benefits for Teachers, Professors, Students */}
       <PersonaBenefits
-        onOpenCanvas={onOpenCanvas}
+        onOpenCanvas={handleOpenCanvas}
         onSignIn={() => setIsAuthModalOpen(true)}
       />
 
       {/* Pre-footer Call-To-Action Banner */}
       <CTASection
         onContinueWithGoogle={handleContinueWithGoogle}
-        onOpenCanvas={onOpenCanvas}
+        onOpenCanvas={handleOpenCanvas}
       />
 
       {/* Polished Footer */}
       <Footer
-        onOpenCanvas={onOpenCanvas}
+        onOpenCanvas={handleOpenCanvas}
         onSignIn={() => setIsAuthModalOpen(true)}
       />
 
@@ -85,6 +93,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={onOpenDashboard}
       />
     </div>
   );

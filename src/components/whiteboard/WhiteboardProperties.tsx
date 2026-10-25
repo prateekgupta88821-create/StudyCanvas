@@ -1,5 +1,5 @@
 import React from 'react';
-import { useWhiteboard } from '@/contexts/WhiteboardContext';
+import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { GridType } from '@/types/whiteboard';
 import { ZoomIn, ZoomOut } from 'lucide-react';
 

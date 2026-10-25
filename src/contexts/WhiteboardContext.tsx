@@ -9,7 +9,7 @@ import {
 } from '@/types/whiteboard';
 import { firestoreService } from '@/services/firestoreService';
 import { googleDriveService } from '@/services/googleDriveService';
-import { useAuth } from './AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { storage } from '@/utils/storage';
 
 export interface WhiteboardContextType {
@@ -431,4 +431,3 @@ export const WhiteboardProvider: React.FC<{
 };
 
 export { WhiteboardContext };
-export { useWhiteboard } from '@/hooks/useWhiteboard';

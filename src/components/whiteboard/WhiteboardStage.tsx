@@ -12,7 +12,7 @@ import {
   Transformer 
 } from 'react-konva';
 import type Konva from 'konva';
-import { useWhiteboard } from '@/contexts/WhiteboardContext';
+import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { 
   CanvasElement, 
   StrokeElement, 

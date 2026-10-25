@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useFirestoreProjects } from '@/hooks/useFirestoreProjects';
 import { WhiteboardProject, WhiteboardTemplate } from '@/types/whiteboard';
 import { TemplateGallery } from '@/components/dashboard/TemplateGallery';

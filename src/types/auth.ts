@@ -16,9 +16,12 @@ export interface AuthContextType {
   firebaseUser: import('firebase/auth').User | null;
   loading: boolean;
   error: string | null;
+  authErrorInfo: import('@/services/authService').AuthErrorInfo | null;
+  isFirebaseConfigured: boolean;
   driveAccessToken: string | null;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  clearError: () => void;
   refreshDriveToken: () => Promise<string | null>;
   updateRole: (role: EducatorRole) => Promise<void>;
 }

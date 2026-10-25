@@ -5,12 +5,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { storage } from '@/utils/storage';
 import { UserPreferences } from '@/types/settings';
 import { EducatorRole } from '@/types/auth';
+import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
 import { 
   GraduationCap, 
   HardDrive, 
   Check, 
   Flame, 
-  Building 
+  Building,
+  Sun,
+  Moon,
+  Laptop
 } from 'lucide-react';
 
 export interface SettingsModalProps {
@@ -23,6 +27,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
 }) => {
   const { updateRole, driveAccessToken } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [preferences, setPreferences] = useState<UserPreferences>(() => storage.getPreferences());
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -31,8 +36,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     await updateRole(role);
   };
 
+  const handleThemeChange = (newTheme: ThemeMode) => {
+    setPreferences(prev => ({ ...prev, theme: newTheme }));
+    setTheme(newTheme);
+  };
+
   const handleSave = () => {
     storage.savePreferences(preferences);
+    setTheme(preferences.theme as ThemeMode);
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -49,6 +60,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       maxWidth="max-w-xl"
     >
       <div className="space-y-5 pt-2">
+        {/* Appearance & Theme Selection */}
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">
+            Appearance & Theme
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: 'dark', label: 'Dark Mode', desc: 'Sleek dark & lime', icon: Moon },
+              { id: 'light', label: 'Light Mode', desc: 'Paper & slate', icon: Sun },
+              { id: 'system', label: 'System Sync', desc: 'Matches device', icon: Laptop },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isSelected = theme === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleThemeChange(item.id as ThemeMode)}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    isSelected
+                      ? 'border-lime-500 bg-lime-500/10 text-white ring-1 ring-lime-500'
+                      : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Icon className={`h-4 w-4 ${isSelected ? 'text-lime-400' : 'text-slate-500'}`} />
+                    <span className="text-xs font-semibold">{item.label}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">{item.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Academic Role Selection */}
         <div>
           <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">

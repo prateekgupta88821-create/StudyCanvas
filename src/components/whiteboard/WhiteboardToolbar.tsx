@@ -26,7 +26,8 @@ import {
   Network,
   FileUp,
   LayoutTemplate,
-  Crop
+  Crop,
+  Sparkles
 } from 'lucide-react';
 
 export interface WhiteboardToolbarProps {
@@ -38,6 +39,8 @@ export interface WhiteboardToolbarProps {
   onOpenPdfImportModal: () => void;
   onOpenTemplatesModal: () => void;
   onOpenImageCropModal: () => void;
+  onOpenAiAssistant?: () => void;
+  isAiAssistantOpen?: boolean;
 }
 
 export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
@@ -49,6 +52,8 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
   onOpenPdfImportModal,
   onOpenTemplatesModal,
   onOpenImageCropModal,
+  onOpenAiAssistant,
+  isAiAssistantOpen,
 }) => {
   const { 
     tool, 
@@ -130,12 +135,12 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
   }
 
   return (
-    <div className="fixed left-4 top-20 z-40 select-none">
+    <div className="fixed left-3 sm:left-4 top-16 sm:top-20 z-40 select-none">
       <motion.div
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800/90 bg-[#0c1017]/95 p-1.5 shadow-2xl backdrop-blur-xl"
+        className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800/90 bg-[#0c1017]/95 p-1.5 shadow-2xl backdrop-blur-xl max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden"
       >
         {/* Hidden file input for image upload */}
         <input
@@ -158,6 +163,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Select & Transform (V)"
+          aria-label="Select & Transform (V)"
         >
           <MousePointer className="h-4 w-4" />
         </button>
@@ -174,6 +180,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Pan / Hand Tool (H or Space+Drag)"
+          aria-label="Pan / Hand Tool (H or Space+Drag)"
         >
           <Hand className="h-4 w-4" />
         </button>
@@ -192,6 +199,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Pen / Freehand (P)"
+          aria-label="Pen / Freehand (P)"
         >
           <PenTool className="h-4 w-4" />
         </button>
@@ -208,6 +216,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Highlighter (B)"
+          aria-label="Highlighter (B)"
         >
           <Highlighter className="h-4 w-4" />
         </button>
@@ -224,6 +233,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Eraser (E)"
+          aria-label="Eraser (E)"
         >
           <Eraser className="h-4 w-4" />
         </button>
@@ -247,6 +257,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
                 : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
             }`}
             title="Geometric Shapes (S)"
+            aria-label="Geometric Shapes (S)"
           >
             {getShapeIcon()}
             <ChevronRight className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 opacity-70" />
@@ -264,6 +275,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
                   <button
                     key={s.type}
                     onClick={() => handleSelectShape(s.type)}
+                    aria-label={`Shape: ${s.label}`}
                     className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
                       shapeType === s.type && tool === 'shape'
                         ? 'bg-lime-500/20 text-lime-400 font-semibold'
@@ -291,6 +303,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Text Note (T)"
+          aria-label="Text Note (T)"
         >
           <Type className="h-4 w-4" />
         </button>
@@ -307,6 +320,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
           }`}
           title="Sticky Note (N)"
+          aria-label="Sticky Note (N)"
         >
           <StickyNote className="h-4 w-4" />
         </button>
@@ -317,6 +331,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
             onClick={onOpenImageCropModal}
             className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-lime-300 transition-all"
             title="Image Upload & Aspect Ratio Framing"
+            aria-label="Image Upload & Aspect Ratio Framing"
           >
             <Crop className="h-4 w-4" />
           </button>
@@ -330,6 +345,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           onClick={onOpenFormulaModal}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-lime-400 transition-all"
           title="Math Formula & LaTeX (M)"
+          aria-label="Math Formula & LaTeX (M)"
         >
           <Sigma className="h-4 w-4" />
         </button>
@@ -339,6 +355,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           onClick={onOpenGraphModal}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition-all"
           title="2D Function Graph Plotter (G)"
+          aria-label="2D Function Graph Plotter (G)"
         >
           <Activity className="h-4 w-4" />
         </button>
@@ -348,6 +365,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           onClick={onOpenFlowchartModal}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-emerald-400 transition-all"
           title="Flowchart & Logic Nodes"
+          aria-label="Flowchart & Logic Nodes"
         >
           <Workflow className="h-4 w-4" />
         </button>
@@ -357,6 +375,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           onClick={onOpenMindmapModal}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-amber-400 transition-all"
           title="Mind Map & Concept Tree"
+          aria-label="Mind Map & Concept Tree"
         >
           <Network className="h-4 w-4" />
         </button>
@@ -366,6 +385,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           onClick={onOpenTableModal}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-purple-400 transition-all"
           title="Comparison & Lecture Table"
+          aria-label="Comparison & Lecture Table"
         >
           <TableIcon className="h-4 w-4" />
         </button>
@@ -377,6 +397,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           onClick={onOpenPdfImportModal}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-rose-400 transition-all"
           title="Import PDF Slides & Exam Papers"
+          aria-label="Import PDF Slides & Exam Papers"
         >
           <FileUp className="h-4 w-4" />
         </button>
@@ -386,13 +407,30 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           onClick={onOpenTemplatesModal}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-lime-400 transition-all"
           title="Educational Starter Templates"
+          aria-label="Educational Starter Templates"
         >
           <LayoutTemplate className="h-4 w-4" />
         </button>
 
+        {/* 17. AI Learning Assistant */}
+        {onOpenAiAssistant && (
+          <button
+            onClick={onOpenAiAssistant}
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+              isAiAssistantOpen
+                ? 'bg-lime-500 text-slate-950 font-bold shadow-lg shadow-lime-500/25 ring-1 ring-lime-400'
+                : 'text-lime-400 hover:bg-lime-500/10 hover:text-lime-300'
+            }`}
+            title="AI Learning Assistant (Explain, Notes, Quiz, Diagrams)"
+            aria-label="AI Learning Assistant (Explain, Notes, Quiz, Diagrams)"
+          >
+            <Sparkles className="h-4 w-4" />
+          </button>
+        )}
+
         <div className="h-[1px] w-6 bg-slate-800 my-0.5" />
 
-        {/* 17. Laser Pointer */}
+        {/* 18. Laser Pointer */}
         <button
           onClick={() => {
             setTool('laser');
@@ -404,6 +442,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
               : 'text-slate-400 hover:bg-slate-800 hover:text-red-400'
           }`}
           title="Laser Pointer (L)"
+          aria-label="Laser Pointer (L)"
         >
           <Flame className="h-4 w-4" />
         </button>

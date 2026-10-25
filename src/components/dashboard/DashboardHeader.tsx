@@ -5,12 +5,12 @@ import {
   Menu, 
   Sparkles,
   X,
-  CheckCircle2,
-  Moon
+  CheckCircle2
 } from 'lucide-react';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { useAuth } from '@/hooks/useAuth';
 import { DriveStatusBadge } from '@/components/drive/DriveStatusBadge';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 interface DashboardHeaderProps {
   searchQuery: string;
@@ -90,14 +90,8 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         {/* Google Drive Status & Reconnect Badge */}
         <DriveStatusBadge />
 
-        {/* Theme Indicator (Dark Sophisticated) */}
-        <div 
-          className="hidden lg:flex items-center gap-1 text-[11px] font-medium text-slate-400 bg-slate-900 border border-slate-800 px-2 py-1 rounded-xl"
-          title="Current Theme: Deep Charcoal & Electric Lime"
-        >
-          <Moon className="h-3.5 w-3.5 text-lime-400" />
-          <span>Dark Mode</span>
-        </div>
+        {/* Theme Toggle Button */}
+        <ThemeToggle />
 
         {/* Notifications Bell */}
         <div className="relative">

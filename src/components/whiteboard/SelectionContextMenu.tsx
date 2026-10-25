@@ -9,10 +9,15 @@ import {
   Lock, 
   Unlock, 
   Files,
-  X 
+  X,
+  Sparkles
 } from 'lucide-react';
 
-export const SelectionContextMenu: React.FC = () => {
+export interface SelectionContextMenuProps {
+  onOpenAiAssistant?: () => void;
+}
+
+export const SelectionContextMenu: React.FC<SelectionContextMenuProps> = ({ onOpenAiAssistant }) => {
   const {
     selectedElementIds,
     activePage,
@@ -60,6 +65,21 @@ export const SelectionContextMenu: React.FC = () => {
         style={{ left: `${clampedX}px`, top: `${clampedY}px` }}
         className="fixed z-50 select-none flex items-center gap-1 rounded-2xl border border-slate-800/90 bg-[#0c1017]/95 p-1.5 shadow-2xl backdrop-blur-xl text-slate-200"
       >
+        {/* Ask AI button */}
+        {onOpenAiAssistant && (
+          <>
+            <button
+              onClick={onOpenAiAssistant}
+              className="h-8 px-2.5 rounded-xl flex items-center gap-1.5 text-xs font-semibold text-lime-400 bg-lime-500/15 hover:bg-lime-500/25 border border-lime-500/30 transition-colors"
+              title="Ask AI Learning Assistant about selected objects"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-lime-400" />
+              <span>Ask AI</span>
+            </button>
+            <div className="h-4 w-[1px] bg-slate-800 mx-0.5" />
+          </>
+        )}
+
         {/* Duplicate button */}
         <button
           onClick={duplicateSelected}

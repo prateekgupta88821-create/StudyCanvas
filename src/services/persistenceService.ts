@@ -1,6 +1,5 @@
 import { WhiteboardProject } from '@/types/whiteboard';
 import { 
-  SaveStatus, 
   RecoveryDraft, 
   PersistenceConfig, 
   PersistenceState, 

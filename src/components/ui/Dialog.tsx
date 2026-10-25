@@ -51,12 +51,15 @@ export const Dialog: React.FC<DialogProps> = ({
 
           {/* Dialog Container */}
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title || 'Dialog'}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
             className={cn(
-              'relative w-full rounded-2xl border border-slate-750 bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl z-10 text-slate-100 max-h-[90vh] overflow-y-auto',
+              'relative w-[95vw] sm:w-full rounded-2xl border border-slate-750 bg-slate-900/95 p-5 sm:p-6 shadow-2xl backdrop-blur-xl z-10 text-slate-100 max-h-[88vh] overflow-y-auto',
               maxWidth,
               className
             )}

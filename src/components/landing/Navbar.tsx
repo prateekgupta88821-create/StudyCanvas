@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { Menu, X, ArrowRight } from 'lucide-react';
 
 export interface NavbarProps {
@@ -65,6 +66,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onSignIn, onOpenCanvas }) => {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center gap-3">
+          <ThemeToggle />
+
           <Button
             variant="ghost"
             size="sm"
@@ -85,15 +88,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onSignIn, onOpenCanvas }) => {
           </Button>
         </div>
 
-        {/* Mobile Hamburger Button */}
-        <button
-          onClick={() => setMobileMenuOpen(prev => !prev)}
-          className="md:hidden rounded-lg p-2 text-slate-400 hover:bg-slate-850 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
-          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={mobileMenuOpen}
-        >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        {/* Mobile Actions & Hamburger */}
+        <div className="flex md:hidden items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={() => setMobileMenuOpen(prev => !prev)}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-850 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Drawer */}
@@ -120,7 +126,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSignIn, onOpenCanvas }) => {
                 setMobileMenuOpen(false);
                 onSignIn();
               }}
-              className="w-full text-xs"
+              className="w-full text-xs min-h-[44px]"
             >
               Sign In
             </Button>
@@ -131,7 +137,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSignIn, onOpenCanvas }) => {
                 setMobileMenuOpen(false);
                 onOpenCanvas();
               }}
-              className="w-full text-xs font-semibold"
+              className="w-full text-xs font-semibold min-h-[44px]"
             >
               Open Interactive Canvas
             </Button>

@@ -1,24 +1,33 @@
-import { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { WhiteboardProvider } from '@/contexts/WhiteboardContext';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { StudyCanvasLoadingScreen } from '@/components/common/StudyCanvasLoadingScreen';
-import { LandingPage } from '@/pages/LandingPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { WhiteboardPage } from '@/pages/WhiteboardPage';
 import { WhiteboardProject, WhiteboardTemplate, Page } from '@/types/whiteboard';
 import { storage } from '@/utils/storage';
 import { useAuth } from '@/hooks/useAuth';
+
+// Performance: Lazy-load heavy route components with Suspense
+const LandingPage = lazy(() =>
+  import('@/pages/LandingPage').then((m) => ({ default: m.LandingPage }))
+);
+const DashboardPage = lazy(() =>
+  import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
+);
+const WhiteboardPage = lazy(() =>
+  import('@/pages/WhiteboardPage').then((m) => ({ default: m.WhiteboardPage }))
+);
 
 function AppContent() {
   const { user, loading } = useAuth();
   const [targetView, setTargetView] = useState<'landing' | 'dashboard' | 'whiteboard'>('landing');
   const [activeProject, setActiveProject] = useState<WhiteboardProject | null>(null);
 
-  // Requirements 9 & 10: Protect dashboard, project, and whiteboard routes.
+  // Requirements: Protect dashboard and whiteboard routes.
   // When user is not authenticated, currentView is derived strictly as 'landing'.
-  const currentView: 'landing' | 'dashboard' | 'whiteboard' = 
+  const currentView: 'landing' | 'dashboard' | 'whiteboard' =
     !user && (targetView === 'dashboard' || targetView === 'whiteboard')
       ? 'landing'
       : targetView;
@@ -37,7 +46,6 @@ function AppContent() {
     subject = 'General',
     template?: WhiteboardTemplate
   ) => {
-    // Protected route check
     if (!user) {
       setTargetView('landing');
       return;
@@ -69,13 +77,13 @@ function AppContent() {
     setTargetView('whiteboard');
   };
 
-  // Requirement 11: Show a loading screen while authentication status is being resolved to prevent redirect flicker
+  // Show a loading screen while authentication status is being resolved to prevent redirect flicker
   if (loading) {
     return <StudyCanvasLoadingScreen message="Resolving secure educator session..." />;
   }
 
   return (
-    <>
+    <Suspense fallback={<StudyCanvasLoadingScreen message="Loading StudyCanvas..." />}>
       {currentView === 'landing' && (
         <LandingPage
           onOpenCanvas={() => {
@@ -106,18 +114,20 @@ function AppContent() {
           />
         </WhiteboardProvider>
       )}
-    </>
+    </Suspense>
   );
 }
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

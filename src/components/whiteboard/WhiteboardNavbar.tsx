@@ -3,6 +3,7 @@ import { useWhiteboard } from '@/hooks/useWhiteboard';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { UserMenu } from '@/components/auth/UserMenu';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { 
   ArrowLeft, 
   Undo2, 
@@ -26,7 +27,9 @@ import {
   AlertTriangle,
   CloudOff,
   KeyRound,
-  History
+  History,
+  Sparkles,
+  MessageSquare
 } from 'lucide-react';
 
 export interface WhiteboardNavbarProps {
@@ -36,6 +39,11 @@ export interface WhiteboardNavbarProps {
   onOpenPageDrawer: () => void;
   onOpenTemplatesModal?: () => void;
   onOpenVersionHistory?: () => void;
+  onToggleAiAssistant?: () => void;
+  isAiAssistantOpen?: boolean;
+  onOpenShare?: () => void;
+  onToggleComments?: () => void;
+  isCommentsOpen?: boolean;
 }
 
 export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
@@ -45,6 +53,11 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
   onOpenPageDrawer,
   onOpenTemplatesModal,
   onOpenVersionHistory,
+  onToggleAiAssistant,
+  isAiAssistantOpen,
+  onOpenShare,
+  onToggleComments,
+  isCommentsOpen,
 }) => {
   const { 
     project, 
@@ -228,8 +241,26 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
         </button>
       </div>
 
-      {/* Right section: Presentation, Templates, Focus Mode, Properties Toggle, Drive, Export, Settings, User */}
+      {/* Right section: AI Tutor, Presentation, Templates, Focus Mode, Properties Toggle, Drive, Export, Settings, User */}
       <div className="flex items-center gap-1 sm:gap-1.5">
+        {/* AI Learning Assistant */}
+        {onToggleAiAssistant && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onToggleAiAssistant}
+            title="AI Learning Assistant (Explain, Summaries, Flashcards, Quiz, Flowcharts)"
+            className={`text-xs h-8 border-lime-500/40 text-lime-400 hover:bg-lime-500/10 transition-all ${
+              isAiAssistantOpen
+                ? 'bg-lime-500/20 border-lime-500 text-lime-300 shadow-[0_0_12px_rgba(163,230,53,0.25)]'
+                : 'bg-slate-900/80'
+            }`}
+          >
+            <Sparkles className="mr-1.5 h-3.5 w-3.5 text-lime-400" />
+            <span className="hidden sm:inline">AI Tutor</span>
+          </Button>
+        )}
+
         {/* Presentation Mode */}
         <Button
           variant="outline"
@@ -323,15 +354,29 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
           <Trash2 className="h-4 w-4" />
         </Button>
 
-        {/* Share Button */}
+        {/* Comments Drawer Toggle */}
+        {onToggleComments && (
+          <Button
+            variant="ghost"
+            size="iconSm"
+            onClick={onToggleComments}
+            title="Whiteboard Comments & Review"
+            className={isCommentsOpen ? "text-sky-400 bg-sky-500/10" : "text-slate-400 hover:text-white"}
+          >
+            <MessageSquare className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Share Button (Real-time Collaboration & Role Management) */}
         <Button
-          variant="ghost"
-          size="iconSm"
-          onClick={handleShare}
-          title="Share Whiteboard Link"
-          className="text-slate-400 hover:text-white hidden sm:inline-flex"
+          variant="outline"
+          size="sm"
+          onClick={onOpenShare || handleShare}
+          title="Share & Real-Time Collaboration"
+          className="text-xs h-8 border-slate-700 bg-slate-900/80 text-slate-200 hover:text-white hover:border-lime-500/50 hidden sm:inline-flex"
         >
-          {copiedLink ? <Check className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
+          <Share2 className="mr-1.5 h-3.5 w-3.5 text-lime-400" />
+          <span>Share</span>
         </Button>
 
         {/* Export Button */}
@@ -344,6 +389,9 @@ export const WhiteboardNavbar: React.FC<WhiteboardNavbarProps> = ({
           <Download className="mr-1.5 h-3.5 w-3.5" />
           <span className="hidden sm:inline">Export</span>
         </Button>
+
+        {/* Theme Toggle Button */}
+        <ThemeToggle className="hidden md:flex h-8" />
 
         {/* Settings */}
         <Button

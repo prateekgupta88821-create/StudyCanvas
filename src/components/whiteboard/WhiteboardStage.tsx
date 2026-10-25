@@ -15,6 +15,9 @@ import {
 } from 'react-konva';
 import type Konva from 'konva';
 import { useWhiteboard } from '@/hooks/useWhiteboard';
+import { useAuth } from '@/hooks/useAuth';
+import { useTheme } from '@/contexts/ThemeContext';
+import { collaborationService } from '@/services/collaborationService';
 import { 
   CanvasElement, 
   StrokeElement, 
@@ -78,6 +81,7 @@ const CanvasImageItem: React.FC<{
 
 export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) => {
   const {
+    project,
     activePage,
     tool,
     shapeType,
@@ -100,6 +104,9 @@ export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) =>
     setSelectedElementIds,
     isFocusMode,
   } = useWhiteboard();
+
+  const { user } = useAuth();
+  const { resolvedTheme } = useTheme();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
@@ -424,6 +431,20 @@ export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) =>
 
     const worldPos = getWorldPointerPos();
     if (!worldPos) return;
+
+    // Broadcast cursor position to collaborators
+    if (project?.id && activePage?.id && user?.uid) {
+      collaborationService.broadcastCursor(project.id, {
+        uid: user.uid,
+        displayName: user.displayName || 'Collaborator',
+        email: user.email || '',
+        color: '#a3e635',
+        x: worldPos.x,
+        y: worldPos.y,
+        pageId: activePage.id,
+        lastActive: Date.now(),
+      });
+    }
 
     // Laser trail updates
     if (tool === 'laser') {
@@ -783,20 +804,26 @@ export const WhiteboardStage: React.FC<WhiteboardStageProps> = ({ stageRef }) =>
     }
   };
 
+  const isLight = resolvedTheme === 'light';
+  const defaultCanvasBg = isLight ? '#f8fafc' : '#090d16';
+  const dotColor = isLight ? 'rgba(71, 85, 105, 0.28)' : 'rgba(255, 255, 255, 0.12)';
+  const gridLineColor = isLight ? 'rgba(71, 85, 105, 0.15)' : 'rgba(255, 255, 255, 0.06)';
+  const ruledLineColor = isLight ? 'rgba(71, 85, 105, 0.18)' : 'rgba(255, 255, 255, 0.08)';
+
   return (
     <div
       ref={containerRef}
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
-      className="relative w-full h-full select-none overflow-hidden"
+      className="relative w-full h-full select-none overflow-hidden canvas-touch-safe touch-none"
       style={{
-        backgroundColor: activePage.backgroundColor || '#090d16',
+        backgroundColor: activePage.backgroundColor || defaultCanvasBg,
         backgroundImage: activePage.gridType === 'dots'
-          ? 'radial-gradient(circle, rgba(255,255,255,0.12) 1.2px, transparent 1.2px)'
+          ? `radial-gradient(circle, ${dotColor} 1.2px, transparent 1.2px)`
           : activePage.gridType === 'grid'
-          ? 'linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px)'
+          ? `linear-gradient(to right, ${gridLineColor} 1px, transparent 1px), linear-gradient(to bottom, ${gridLineColor} 1px, transparent 1px)`
           : activePage.gridType === 'ruled'
-          ? 'linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)'
+          ? `linear-gradient(to bottom, ${ruledLineColor} 1px, transparent 1px)`
           : 'none',
         backgroundSize: activePage.gridType === 'ruled'
           ? `100% ${32 * scale}px`

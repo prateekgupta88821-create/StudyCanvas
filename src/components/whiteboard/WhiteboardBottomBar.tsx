@@ -71,6 +71,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
           }`}
           title="Hand / Pan tool (H or Space+Drag)"
+          aria-label="Hand / Pan tool (H or Space+Drag)"
         >
           <Hand className="h-3.5 w-3.5" />
         </button>
@@ -82,6 +83,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           onClick={zoomOut}
           className="h-7 w-7 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors"
           title="Zoom Out (-)"
+          aria-label="Zoom Out (-)"
         >
           <ZoomOut className="h-3.5 w-3.5" />
         </button>
@@ -91,6 +93,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           onClick={resetZoom}
           className="px-2 py-1 text-xs font-semibold text-slate-300 hover:text-lime-400 transition-colors min-w-[50px] text-center"
           title="Reset Zoom to 100% (0)"
+          aria-label={`Current Zoom ${Math.round(scale * 100)} percent. Click to reset to 100 percent`}
         >
           {Math.round(scale * 100)}%
         </button>
@@ -100,6 +103,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           onClick={zoomIn}
           className="h-7 w-7 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors"
           title="Zoom In (+)"
+          aria-label="Zoom In (+)"
         >
           <ZoomIn className="h-3.5 w-3.5" />
         </button>
@@ -109,6 +113,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           onClick={() => zoomToFit()}
           className="h-7 w-7 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors"
           title="Zoom to Fit Canvas"
+          aria-label="Zoom to Fit Canvas"
         >
           <Maximize2 className="h-3.5 w-3.5" />
         </button>
@@ -121,6 +126,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           disabled={activePageIndex === 0}
           className="h-7 w-7 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-30 flex items-center justify-center transition-colors"
           title="Previous Page"
+          aria-label="Previous Page"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -134,6 +140,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           disabled={activePageIndex >= project.pages.length - 1}
           className="h-7 w-7 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-30 flex items-center justify-center transition-colors"
           title="Next Page"
+          aria-label="Next Page"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -144,6 +151,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           onClick={() => addPage()}
           className="h-7 px-2 rounded-lg text-xs font-medium text-lime-400 hover:bg-lime-500/10 flex items-center gap-1 transition-colors"
           title="Add New Slide / Page"
+          aria-label="Add New Slide / Page"
         >
           <Plus className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Add Page</span>
@@ -156,6 +164,7 @@ export const WhiteboardBottomBar: React.FC<WhiteboardBottomBarProps> = ({ onOpen
           onClick={onOpenShortcuts}
           className="h-7 w-7 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors"
           title="Keyboard Shortcuts (?)"
+          aria-label="Keyboard Shortcuts (?)"
         >
           <HelpCircle className="h-3.5 w-3.5" />
         </button>
